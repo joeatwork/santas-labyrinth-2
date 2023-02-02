@@ -1,0 +1,60 @@
+.App-header-container {
+  background-color: white;
+  border-bottom: 1px solid black;
+  margin: 0 0 var(--default-spacing) 0;
+  box-shadow: 1px 2px 3px -2px #101010;
+}
+
+/* TODO: you can probably do cool "min-margin" stuff
+   by containing App-placeholder-body in something
+  full width with margins */
+
+  /* For now, target a 640px square playfield */
+
+.App-header {
+  margin: 0 auto;
+  font-size: 14px;
+  font-weight: normal;
+  font-family: "chicagoflfregular", sans-serif;
+  line-height: 18px;
+  max-width: 320px;
+}
+
+.App-placeholder-body {
+  background-color: white;
+  border: 1px solid black;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.App-image-viewport {
+  box-shadow: 1px 2px 3px -2px #101010;
+  position: relative; /* so the box shadow falls on the elements below */
+}
+
+.App-divider {
+  background-image: url("../images/backgrounds/six_bars_17px.png");
+  font-family: "chicagoflfregular";
+  background-repeat: repeat-x;
+  background-position-y: center;
+  border-bottom: 1px solid black;
+  border-top: 1px solid black;
+  display: flex;
+}
+
+.App-scene-title {
+  margin: 0 auto;
+  background-color: white;
+  align-items: center;
+  flex: initial;
+  padding: 0 8px;
+  line-height: 1.5;
+}
+
+.App-placeholder-dialog {
+  padding: 0 14px;
+}
+
+.App-placeholder-dialog-options {
+  padding-inline-start: 20px;
+}
