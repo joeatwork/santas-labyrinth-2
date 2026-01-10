@@ -1,6 +1,7 @@
 import argparse
 import time
-from animation import AssetManager, create_level_background, render_frame
+from animation import AssetManager, create_dungeon_background, render_frame_camera, Hero
+from dungeon_gen import generate_dungeon
 from streaming import Streamer
 
 def main():
@@ -10,6 +11,8 @@ def main():
     parser.add_argument('--width', type=int, default=800)
     parser.add_argument('--height', type=int, default=600)
     parser.add_argument('--fps', type=int, default=30)
+    parser.add_argument('--map-width', type=int, default=3, help='Map width in rooms')
+    parser.add_argument('--map-height', type=int, default=3, help='Map height in rooms')
     args = parser.parse_args()
 
     # Load Assets
@@ -20,9 +23,17 @@ def main():
         print(f"Error loading assets: {e}")
         return
 
+    # Generate Dungeon
+    print("Generating dungeon...")
+    dungeon_map, start_pos = generate_dungeon(args.map_width, args.map_height)
+    
     # Pre-render static background
-    print("Generating background...")
-    background = create_level_background(args.width, args.height, assets)
+    print("Generating background image...")
+    background = create_dungeon_background(dungeon_map, assets)
+    
+    # Initialize Hero
+    hero = Hero(start_pos[0], start_pos[1])
+    print(f"Hero starting at: {hero.x}, {hero.y}")
 
     # Setup Streamer
     target = args.url if args.url else args.output
@@ -30,16 +41,25 @@ def main():
     streamer.start()
 
     start_time = time.time()
+    last_frame_time = start_time
     
     try:
         while True:
-            t = time.time() - start_time
-            frame = render_frame(background, assets, t)
+            current_time = time.time()
+            dt = current_time - last_frame_time
+            last_frame_time = current_time
+            
+            # Update Hero Logic
+            hero.update(dt, dungeon_map)
+            
+            # Render Camera View
+            frame = render_frame_camera(background, assets, hero, args.width, args.height)
             
             if not streamer.write_frame(frame):
                 break
             
-            elapsed = (time.time() - start_time) - t
+            # Maintain FPS
+            elapsed = time.time() - current_time
             sleep_time = max(0, (1.0/args.fps) - elapsed)
             time.sleep(sleep_time)
             
