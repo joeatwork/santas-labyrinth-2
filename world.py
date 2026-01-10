@@ -1,17 +1,24 @@
 import math
 import numpy as np
-from dungeon_gen import generate_dungeon, Tile
+from dungeon_gen import generate_dungeon, Tile, DungeonMap
+from typing import Tuple
 
-TILE_SIZE = 64
+TILE_SIZE: int = 64
 
 class Dungeon:
-    def __init__(self, width_rooms, height_rooms):
+    def __init__(self, width_rooms: int, height_rooms: int) -> None:
+        self.map: DungeonMap
+        self.start_pos: Tuple[int, int]
         self.map, self.start_pos = generate_dungeon(width_rooms, height_rooms)
+        
+        self.rows: int
+        self.cols: int
         self.rows, self.cols = self.map.shape
-        self.width_pixels = self.cols * TILE_SIZE
-        self.height_pixels = self.rows * TILE_SIZE
+        
+        self.width_pixels: int = self.cols * TILE_SIZE
+        self.height_pixels: int = self.rows * TILE_SIZE
 
-    def is_walkable(self, x, y):
+    def is_walkable(self, x: float, y: float) -> bool:
         col = int(x / TILE_SIZE)
         row = int(y / TILE_SIZE)
         
@@ -22,20 +29,20 @@ class Dungeon:
         return False
 
 class Hero:
-    def __init__(self, x, y):
-        self.x = float(x)
-        self.y = float(y)
-        self.speed = 150.0 # pixels/sec
-        self.direction = 0 # 0=East, 1=South, 2=West, 3=North
-        self.target_x = x
-        self.target_y = y
-        self.state = 'idle' # idle, walking
+    def __init__(self, x: float, y: float) -> None:
+        self.x: float = float(x)
+        self.y: float = float(y)
+        self.speed: float = 150.0 # pixels/sec
+        self.direction: int = 0 # 0=East, 1=South, 2=West, 3=North
+        self.target_x: float = x
+        self.target_y: float = y
+        self.state: str = 'idle' # idle, walking
         
         # Animation State
-        self.walk_frame = 0 # 0 or 1
-        self.dist_accumulator = 0.0 # Track distance for toggling
+        self.walk_frame: int = 0 # 0 or 1
+        self.dist_accumulator: float = 0.0 # Track distance for toggling
 
-    def update(self, dt, dungeon):
+    def update(self, dt: float, dungeon: Dungeon) -> None:
         if self.state == 'idle':
             self.decide_next_move(dungeon)
             self.walk_frame = 0 # Reset to standing frame when idle
@@ -43,7 +50,7 @@ class Hero:
         elif self.state == 'walking':
             self.move(dt)
 
-    def decide_next_move(self, dungeon):
+    def decide_next_move(self, dungeon: Dungeon) -> None:
         # Random Walk Logic
         # Try a random direction
         
@@ -85,7 +92,7 @@ class Hero:
              # Turn randomly if hit wall
              self.direction = np.random.randint(0, 4)
 
-    def move(self, dt):
+    def move(self, dt: float) -> None:
         move_dist = self.speed * dt
         
         diff_x = self.target_x - self.x

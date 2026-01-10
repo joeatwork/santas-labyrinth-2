@@ -1,14 +1,19 @@
 import cv2
 import numpy as np
 import os
-from dungeon_gen import Tile
+from dungeon_gen import Tile, DungeonMap
+from world import Hero
+from typing import Dict, Any, Optional, Tuple
+
+# Type Definition
+Image = np.ndarray
 
 # --- Constants & Sprite Config ---
-TILE_SIZE = 64
+TILE_SIZE: int = 64
 
 # Sprite offsets from death_mountain_paradigm_room.png
 # and spaceman_overworld_64x64.png
-SPRITE_OFFSETS = {
+SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     # Walls (death_mountain)
     'wall_nw_corner': {'x': 0, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
     'wall_ne_corner': {'x': 576, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
@@ -39,14 +44,14 @@ SPRITE_OFFSETS = {
 
 # Static lookup for hero sprites: [direction][frame]
 # Directions: 0=East, 1=South, 2=West, 3=North
-HERO_WALK_CYCLES = (
+HERO_WALK_CYCLES: Tuple[Tuple[str, str], ...] = (
     ('hero_east_0', 'hero_east_1'),   # 0: East
     ('hero_south_0', 'hero_south_1'), # 1: South
     ('hero_west_0', 'hero_west_1'),   # 2: West
     ('hero_north_0', 'hero_north_1'), # 3: North
 )
 
-TILE_MAP = {
+TILE_MAP: Dict[int, Optional[str]] = {
     Tile.FLOOR: 'floor',
     Tile.NORTH_WALL: 'wall_north',
     Tile.SOUTH_WALL: 'wall_south',
@@ -61,11 +66,11 @@ TILE_MAP = {
 }
 
 class AssetManager:
-    def __init__(self):
-        self.images = {}
-        self.sprites = {}
+    def __init__(self) -> None:
+        self.images: Dict[str, Image] = {}
+        self.sprites: Dict[str, Image] = {}
 
-    def load_images(self):
+    def load_images(self) -> None:
         unique_files = set(cfg['file'] for cfg in SPRITE_OFFSETS.values())
         for rel_path in unique_files:
             path = os.path.join('assets', rel_path)
@@ -77,21 +82,19 @@ class AssetManager:
                 raise ValueError(f"Failed to load image: {path}")
             self.images[rel_path] = img
 
-    def get_sprite(self, name):
+    def get_sprite(self, name: str) -> Image:
         if name in self.sprites:
             return self.sprites[name]
         
-        cfg = SPRITE_OFFSETS.get(name)
-        if not cfg:
-            return None
+        cfg = SPRITE_OFFSETS[name] # Adjusted to match user's non-safe access edit expectation
             
         src_img = self.images[cfg['file']]
-        x, y, w, h = cfg['x'], cfg['y'], cfg['w'], cfg['h']
+        x, y, w, h = int(cfg['x']), int(cfg['y']), int(cfg['w']), int(cfg['h'])
         sprite = src_img[y:y+h, x:x+w]
         self.sprites[name] = sprite
         return sprite
 
-def overlay_image(background, foreground, x, y):
+def overlay_image(background: Image, foreground: Image, x: int, y: int) -> None:
     """Overlays fg on bg at (x,y) handling alpha channel."""
     bh, bw = background.shape[:2]
     fh, fw = foreground.shape[:2]
@@ -128,7 +131,7 @@ def overlay_image(background, foreground, x, y):
     else:
         background[y1:y2, x1:x2] = fg_crop
 
-def create_dungeon_background(dungeon_map, assets):
+def create_dungeon_background(dungeon_map: DungeonMap, assets: AssetManager) -> Image:
     """
     Creates the full static background image for the dungeon.
     """
@@ -137,7 +140,7 @@ def create_dungeon_background(dungeon_map, assets):
     height = rows * TILE_SIZE
     
     # Create black background
-    bg = np.zeros((height, width, 3), np.uint8)
+    bg: Image = np.zeros((height, width, 3), np.uint8)
     
     print(f"Generating dungeon background: {width}x{height}...")
     
@@ -148,22 +151,25 @@ def create_dungeon_background(dungeon_map, assets):
             
             if sprite_name:
                 sprite = assets.get_sprite(sprite_name)
-                if sprite is not None:
-                    overlay_image(bg, sprite, c * TILE_SIZE, r * TILE_SIZE)
+                # sprite is guaranteed Image by type hint, but might fail logic if key missing
+                # get_sprite raises keyerror if missing, so we are safe assuming returns Image
+                overlay_image(bg, sprite, c * TILE_SIZE, r * TILE_SIZE)
             elif tile_type != Tile.NOTHING:
                  # Default to floor for specified tiles that are missing mappings
-                 sprite = assets.get_sprite('floor')
-                 if sprite is not None:
+                 try:
+                    sprite = assets.get_sprite('floor')
                     overlay_image(bg, sprite, c * TILE_SIZE, r * TILE_SIZE)
+                 except Exception:
+                     pass
                     
     return bg
 
-def render_frame_camera(bg_image, assets, hero, view_width, view_height):
+def render_frame_camera(bg_image: Image, assets: AssetManager, hero: Hero, view_width: int, view_height: int) -> Image:
     """
     Renders the frame centered on the hero.
     """
     # Create blank canvas
-    frame = np.zeros((view_height, view_width, 3), np.uint8)
+    frame: Image = np.zeros((view_height, view_width, 3), np.uint8)
     
     # Calculate camera top-left
     cam_x = int(hero.x - view_width / 2)
@@ -194,7 +200,10 @@ def render_frame_camera(bg_image, assets, hero, view_width, view_height):
         # Fallback
         sprite_name = HERO_WALK_CYCLES[hero.direction][0]
     
-    hero_sprite = assets.get_sprite(sprite_name)
-    overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
+    try:
+        hero_sprite = assets.get_sprite(sprite_name)
+        overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
+    except KeyError:
+        pass # Should not happen with correct data
 
     return frame

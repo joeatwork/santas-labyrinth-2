@@ -1,32 +1,31 @@
 import random
 import numpy as np
+from typing import Tuple, List, Dict, Set
 
 # Tile Constants (Matching animation.py expectations or defining new ones)
 class Tile:
-    NOTHING = 0
-    FLOOR = 1
-    NORTH_WALL = 10
-    SOUTH_WALL = 11
-    WEST_WALL = 12
-    EAST_WALL = 13
-    NW_CORNER = 14
-    NE_CORNER = 15
-    SW_CORNER = 16
-    SE_CORNER = 17
+    NOTHING: int = 0
+    FLOOR: int = 1
+    NORTH_WALL: int = 10
+    SOUTH_WALL: int = 11
+    WEST_WALL: int = 12
+    EAST_WALL: int = 13
+    NW_CORNER: int = 14
+    NE_CORNER: int = 15
+    SW_CORNER: int = 16
+    SE_CORNER: int = 17
     
     # Doors (simplified for now, treated as floor or specific sprites if we had them)
-    # The original game has specific door tiles, but we might just use floor for openings
-    # or specific door sprites if we map them.
-    NORTH_DOOR = 20
-    SOUTH_DOOR = 21
-    WEST_DOOR = 22
-    EAST_DOOR = 23
+    NORTH_DOOR: int = 20
+    SOUTH_DOOR: int = 21
+    WEST_DOOR: int = 22
+    EAST_DOOR: int = 23
 
 # Room size in tiles (from references)
-ROOM_WIDTH = 12
-ROOM_HEIGHT = 10
+ROOM_WIDTH: int = 12
+ROOM_HEIGHT: int = 10
 
-def generate_maze_graph(rows, cols):
+def generate_maze_graph(rows: int, cols: int) -> Tuple[Dict[Tuple[int, int], List[Tuple[int, int]]], Tuple[int, int], Tuple[int, int]]:
     """
     Generates a grid of connected rooms using a simple DFS maze algorithm.
     Returns:
@@ -35,13 +34,13 @@ def generate_maze_graph(rows, cols):
         end: (r,c)
     """
     # Initialize grid
-    grid_cells = [(r, c) for r in range(rows) for c in range(cols)]
-    visited = set()
-    stack = []
-    connections = {cell: [] for cell in grid_cells}
+    grid_cells: List[Tuple[int, int]] = [(r, c) for r in range(rows) for c in range(cols)]
+    visited: Set[Tuple[int, int]] = set()
+    stack: List[Tuple[int, int]] = []
+    connections: Dict[Tuple[int, int], List[Tuple[int, int]]] = {cell: [] for cell in grid_cells}
     
     # Random start
-    start = random.choice(grid_cells)
+    start: Tuple[int, int] = random.choice(grid_cells)
     stack.append(start)
     visited.add(start)
     
@@ -50,7 +49,7 @@ def generate_maze_graph(rows, cols):
         r, c = current
         
         # Find unvisited neighbors
-        neighbors = []
+        neighbors: List[Tuple[int, int]] = []
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
             if 0 <= nr < rows and 0 <= nc < cols and (nr, nc) not in visited:
@@ -68,13 +67,13 @@ def generate_maze_graph(rows, cols):
             stack.pop()
             
     # Pick a random end point that is not start
-    end = start
+    end: Tuple[int, int] = start
     while end == start:
         end = random.choice(grid_cells)
         
     return connections, start, end
 
-def get_room_template(n_door, e_door, s_door, w_door):
+def get_room_template(n_door: bool, e_door: bool, s_door: bool, w_door: bool) -> List[List[int]]:
     """
     Returns a 2D array of Tiles for a single room based on door presence.
     Based on deathMountainRoom template.
@@ -87,12 +86,8 @@ def get_room_template(n_door, e_door, s_door, w_door):
     # Floor
     F = Tile.FLOOR
     
-    # Door placeholders (Use floor for walkability, or specialized tiles if we have them)
-    # The original code has complex door frames. For this PoC, we'll keep it simple.
-    # If a door exists, we put FLOOR. If not, we put WALL.
-    
     # Top Row
-    row0 = [NWC] + [NW]*10 + [NEC]
+    row0: List[int] = [NWC] + [NW]*10 + [NEC]
     
     # If North Door, open the middle
     if n_door:
@@ -101,13 +96,13 @@ def get_room_template(n_door, e_door, s_door, w_door):
         row0[6] = F
         
     # Bottom Row
-    row9 = [SWC] + [SW]*10 + [SEC]
+    row9: List[int] = [SWC] + [SW]*10 + [SEC]
     if s_door:
         row9[5] = F
         row9[6] = F
         
     # Middle Rows construction
-    mid_rows = []
+    mid_rows: List[List[int]] = []
     for r in range(1, 9):
         # West boundary
         left = WW
@@ -126,7 +121,11 @@ def get_room_template(n_door, e_door, s_door, w_door):
     furniture = [row0] + mid_rows + [row9]
     return furniture
 
-def generate_dungeon(map_width_rooms, map_height_rooms):
+
+# Type Definition
+DungeonMap = np.ndarray
+
+def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[DungeonMap, Tuple[int, int]]:
     """
     Generates a full tilemap for the dungeon.
     """
@@ -137,7 +136,7 @@ def generate_dungeon(map_width_rooms, map_height_rooms):
     full_height = map_height_rooms * ROOM_HEIGHT
     
     # 0 is NOTHING
-    dungeon_map = np.zeros((full_height, full_width), dtype=int)
+    dungeon_map: DungeonMap = np.zeros((full_height, full_width), dtype=int)
     
     for r in range(map_height_rooms):
         for c in range(map_width_rooms):
