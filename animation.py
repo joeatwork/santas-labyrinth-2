@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import os
-import math
 from dungeon_gen import Tile
 
 # --- Constants & Sprite Config ---
@@ -23,12 +22,29 @@ SPRITE_OFFSETS = {
     # Floor (death_mountain)
     'floor': {'x': 64, 'y': 64, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
     
-    # Hero (spaceman)
-    'hero_south': {'x': 0, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
-    'hero_north': {'x': 64, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
-    'hero_west': {'x': 128, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
-    'hero_east': {'x': 640, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # Hero Walk Cycles (spaceman)
+    # South
+    'hero_south_0': {'x': 192, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'hero_south_1': {'x': 256, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # North
+    'hero_north_0': {'x': 320, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'hero_north_1': {'x': 384, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # West
+    'hero_west_0': {'x': 448, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'hero_west_1': {'x': 512, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # East
+    'hero_east_0': {'x': 576, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'hero_east_1': {'x': 640, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
 }
+
+# Static lookup for hero sprites: [direction][frame]
+# Directions: 0=East, 1=South, 2=West, 3=North
+HERO_WALK_CYCLES = (
+    ('hero_east_0', 'hero_east_1'),   # 0: East
+    ('hero_south_0', 'hero_south_1'), # 1: South
+    ('hero_west_0', 'hero_west_1'),   # 2: West
+    ('hero_north_0', 'hero_north_1'), # 3: North
+)
 
 TILE_MAP = {
     Tile.FLOOR: 'floor',
@@ -115,7 +131,6 @@ def overlay_image(background, foreground, x, y):
 def create_dungeon_background(dungeon_map, assets):
     """
     Creates the full static background image for the dungeon.
-    Warning: This can be large.
     """
     rows, cols = dungeon_map.shape
     width = cols * TILE_SIZE
@@ -136,65 +151,12 @@ def create_dungeon_background(dungeon_map, assets):
                 if sprite is not None:
                     overlay_image(bg, sprite, c * TILE_SIZE, r * TILE_SIZE)
             elif tile_type != Tile.NOTHING:
-                 # Default to floor for unspecified valid tiles
+                 # Default to floor for specified tiles that are missing mappings
                  sprite = assets.get_sprite('floor')
                  if sprite is not None:
                     overlay_image(bg, sprite, c * TILE_SIZE, r * TILE_SIZE)
                     
     return bg
-
-class Hero:
-    def __init__(self, x, y):
-        self.x = float(x)
-        self.y = float(y)
-        self.speed = 150.0 # pixels/sec
-        self.direction = 0 # 0=East, 1=South, 2=West, 3=North
-        self.target_x = x
-        self.target_y = y
-        self.state = 'idle' # idle, walking
-
-    def update(self, dt, dungeon_map):
-        # Very simple random walk AI for this PoC
-        if self.state == 'idle':
-            # Pick a random direction
-            self.direction = np.random.randint(0, 4)
-            dist = TILE_SIZE
-            
-            dx, dy = 0, 0
-            if self.direction == 0: dx = dist  # East
-            elif self.direction == 1: dy = dist # South
-            elif self.direction == 2: dx = -dist # West
-            elif self.direction == 3: dy = -dist # North
-            
-            target_col = int((self.x + dx + TILE_SIZE/2) / TILE_SIZE)
-            target_row = int((self.y + dy + TILE_SIZE/2) / TILE_SIZE)
-            
-            # Check collision
-            rows, cols = dungeon_map.shape
-            if 0 <= target_row < rows and 0 <= target_col < cols:
-                tile = dungeon_map[target_row, target_col]
-                # Is walkable? (Floor or specific tiles)
-                if tile == Tile.FLOOR or tile >= 20: # Floor or Doors
-                     self.target_x = self.x + dx
-                     self.target_y = self.y + dy
-                     self.state = 'walking'
-            
-        elif self.state == 'walking':
-            # Move towards target
-            move_dist = self.speed * dt
-            
-            diff_x = self.target_x - self.x
-            diff_y = self.target_y - self.y
-            dist_sq = diff_x*diff_x + diff_y*diff_y
-            
-            if dist_sq <= move_dist*move_dist:
-                self.x = self.target_x
-                self.y = self.target_y
-                self.state = 'idle'
-            else:
-                angle = math.atan2(diff_y, diff_x)
-                self.x += math.cos(angle) * move_dist
-                self.y += math.sin(angle) * move_dist
 
 def render_frame_camera(bg_image, assets, hero, view_width, view_height):
     """
@@ -213,28 +175,24 @@ def render_frame_camera(bg_image, assets, hero, view_width, view_height):
     cam_y = max(0, min(cam_y, map_h - view_height))
     
     # Crop background
-    # Handle case where map is smaller than view
     if map_w < view_width or map_h < view_height:
-        # Just draw what we can, centered or top-left
-        # For simplicity, top-left with black padding
         frame[:min(map_h, view_height), :min(map_w, view_width)] = \
             bg_image[:min(map_h, view_height), :min(map_w, view_width)]
     else:
-        # Standard crop
         crop = bg_image[cam_y:cam_y+view_height, cam_x:cam_x+view_width]
         frame[:crop.shape[0], :crop.shape[1]] = crop
 
     # Draw Hero relative to camera
-    hero_screen_x = int(hero.x - cam_x - TILE_SIZE/2) # Center sprite
-    hero_screen_y = int(hero.y - cam_y - TILE_SIZE/2) # Center sprite
+    hero_screen_x = int(hero.x - cam_x - TILE_SIZE/2) 
+    hero_screen_y = int(hero.y - cam_y - TILE_SIZE/2) 
     
-    # Determine sprite based on direction
-    # 0=East, 1=South, 2=West, 3=North
-    sprite_name = 'hero_south'
-    if hero.direction == 0: sprite_name = 'hero_east'
-    elif hero.direction == 1: sprite_name = 'hero_south'
-    elif hero.direction == 2: sprite_name = 'hero_west'
-    elif hero.direction == 3: sprite_name = 'hero_north'
+    # Determine sprite based on direction and animation frame
+    # Lookup sprite name from static table
+    try:
+        sprite_name = HERO_WALK_CYCLES[hero.direction][hero.walk_frame]
+    except IndexError:
+        # Fallback
+        sprite_name = HERO_WALK_CYCLES[hero.direction][0]
     
     hero_sprite = assets.get_sprite(sprite_name)
     overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)

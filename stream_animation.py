@@ -1,7 +1,7 @@
 import argparse
 import time
-from animation import AssetManager, create_dungeon_background, render_frame_camera, Hero
-from dungeon_gen import generate_dungeon
+from animation import AssetManager, create_dungeon_background, render_frame_camera
+from world import Dungeon, Hero
 from streaming import Streamer
 
 def main():
@@ -23,16 +23,15 @@ def main():
         print(f"Error loading assets: {e}")
         return
 
-    # Generate Dungeon
-    print("Generating dungeon...")
-    dungeon_map, start_pos = generate_dungeon(args.map_width, args.map_height)
+    # Initialize World
+    print("Generating dungeon world...")
+    dungeon = Dungeon(args.map_width, args.map_height)
     
-    # Pre-render static background
     print("Generating background image...")
-    background = create_dungeon_background(dungeon_map, assets)
+    background = create_dungeon_background(dungeon.map, assets)
     
     # Initialize Hero
-    hero = Hero(start_pos[0], start_pos[1])
+    hero = Hero(dungeon.start_pos[0], dungeon.start_pos[1])
     print(f"Hero starting at: {hero.x}, {hero.y}")
 
     # Setup Streamer
@@ -49,10 +48,10 @@ def main():
             dt = current_time - last_frame_time
             last_frame_time = current_time
             
-            # Update Hero Logic
-            hero.update(dt, dungeon_map)
+            # Update World State
+            hero.update(dt, dungeon)
             
-            # Render Camera View
+            # Render View
             frame = render_frame_camera(background, assets, hero, args.width, args.height)
             
             if not streamer.write_frame(frame):
