@@ -1,8 +1,9 @@
 import argparse
 import time
-from animation import AssetManager, create_dungeon_background, render_frame_camera
-from world import Dungeon, Hero
+import os
+from animation import AssetManager
 from streaming import Streamer
+from content import Stream, TitleCard, DungeonWalk
 
 def main():
     parser = argparse.ArgumentParser()
@@ -23,16 +24,17 @@ def main():
         print(f"Error loading assets: {e}")
         return
 
-    # Initialize World
-    print("Generating dungeon world...")
-    dungeon = Dungeon(args.map_width, args.map_height)
+    # Initialize Stream Loop
+    stream = Stream()
     
-    print("Generating background image...")
-    background = create_dungeon_background(dungeon.map, assets)
+    # Add Title Card (10 seconds)
+    title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
+    stream.add_content(TitleCard(title_path, assets), 10.0)
     
-    # Initialize Hero
-    hero = Hero(dungeon.start_pos[0], dungeon.start_pos[1])
-    print(f"Hero starting at: {hero.x}, {hero.y}")
+    # Add Dungeon Walk (3 minutes = 180 seconds)
+    stream.add_content(DungeonWalk(args.map_width, args.map_height, assets), 180.0)
+    
+    stream.start()
 
     # Setup Streamer
     target = args.url if args.url else args.output
@@ -48,11 +50,11 @@ def main():
             dt = current_time - last_frame_time
             last_frame_time = current_time
             
-            # Update World State
-            hero.update(dt, dungeon)
+            # Update Stream
+            stream.update(dt)
             
-            # Render View
-            frame = render_frame_camera(background, assets, hero, args.width, args.height)
+            # Render Stream
+            frame = stream.render(args.width, args.height)
             
             if not streamer.write_frame(frame):
                 break
