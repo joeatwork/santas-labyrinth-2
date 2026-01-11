@@ -2,6 +2,8 @@
 
 This tool generates a synthetic animation using assets from *Santa's Labyrinth* and streams it via RTMP or saves it to an FLV file using `ffmpeg`.
 
+This project was created with heavy use of LLM coding agents.
+
 ## Prerequisites
 
 1.  **Python 3.x**
@@ -55,6 +57,12 @@ To stream to an RTMP server (e.g., YouTube Live, Twitch, or a local Nginx RTMP m
 
 ```bash
 uv run stream_animation.py --url rtmp://localhost/live/stream_key
+```
+
+Here is the current US East Twitch RTMP URL:
+
+```
+rtmp://iad05.contribute.live-video.net/app/$TWITCH_STREAM_KEY
 ```
 
 **Note:** Ensure your RTMP server is running and accessible.

@@ -27,7 +27,11 @@ class Streamer:
             '-i', '-', # Input from stdin
             '-c:v', 'libx264',
             '-pix_fmt', 'yuv420p',
-            '-preset', 'ultrafast',
+            '-preset', 'veryfast',
+            '-b:v', '3000k',
+            '-maxrate', '3000k',
+            '-bufsize', '6000k',
+            '-g', str(self.fps * 2), # GOP size 2 seconds
             '-f', format_name,
             self.output_target
         ]
