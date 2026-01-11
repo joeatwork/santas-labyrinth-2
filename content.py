@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import random
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Optional, Any
 
@@ -68,6 +69,52 @@ class DungeonWalk(Content):
         if self.hero and self.background is not None:
              return render_frame_camera(self.background, self.assets, self.hero, width, height)
         return np.zeros((height, width, 3), np.uint8)
+
+class VideoClip(Content):
+    def __init__(self, video_path: str):
+        self.video_path = video_path
+        self.cap: Optional[cv2.VideoCapture] = None
+        self.total_frames: int = 0
+        self.fps: float = 30.0
+
+    def enter(self) -> None:
+        if self.cap is not None:
+             self.cap.release()
+        
+        self.cap = cv2.VideoCapture(self.video_path)
+        if not self.cap.isOpened():
+            print(f"Error: Could not open video {self.video_path}")
+            return
+            
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if self.fps <= 0:
+            self.fps = 30.0
+            
+        # Required frames for 30s playback
+        req_seconds = 30.0
+        req_frames = int(req_seconds * self.fps)
+        
+        start_frame = 0
+        if self.total_frames > req_frames:
+             max_start = self.total_frames - req_frames
+             start_frame = random.randint(0, max_start)
+             
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        print(f"Playing video {self.video_path} from frame {start_frame}...")
+
+    def update(self, dt: float) -> None:
+        pass
+
+    def render(self, width: int, height: int) -> Image:
+        if self.cap is None or not self.cap.isOpened():
+            return np.zeros((height, width, 3), np.uint8)
+            
+        ret, frame = self.cap.read()
+        if not ret:
+            return np.zeros((height, width, 3), np.uint8)
+            
+        return cv2.resize(frame, (width, height))
 
 class Stream:
     def __init__(self):

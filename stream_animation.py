@@ -1,9 +1,11 @@
 import argparse
 import time
 import os
+import random
+import glob
 from animation import AssetManager
 from streaming import Streamer
-from content import Stream, TitleCard, DungeonWalk
+from content import Stream, TitleCard, DungeonWalk, VideoClip
 
 def main():
     parser = argparse.ArgumentParser()
@@ -27,13 +29,19 @@ def main():
     # Initialize Stream Loop
     stream = Stream()
     
-    # Add Title Card (10 seconds)
     title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
-    stream.add_content(TitleCard(title_path, assets), 10.0)
-    
-    # Add Dungeon Walk (3 minutes = 180 seconds)
-    stream.add_content(DungeonWalk(args.map_width, args.map_height, assets), 180.0)
-    
+    stream.add_content(TitleCard(title_path, assets), 15.0)
+      
+    stream.add_content(DungeonWalk(args.map_width, args.map_height, assets), 40.0)
+   
+    video_files = glob.glob(os.path.join('large_media', '*.mp4'))
+    if video_files:
+        video_path = random.choice(video_files)
+        print(f"Selected video clip: {video_path}")
+        stream.add_content(VideoClip(video_path), 20.0)
+    else:
+        print("Warning: No MP4 videos found in large_media directory")
+   
     stream.start()
 
     # Setup Streamer
