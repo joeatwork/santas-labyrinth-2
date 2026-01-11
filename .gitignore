@@ -1,4 +1,4 @@
 __pycache__
 .DS_Store
 TWITCH_STREAM_KEY
-large_media/*
+large_media/*.mp4
