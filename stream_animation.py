@@ -1,4 +1,5 @@
 import argparse
+import sys
 import time
 import os
 import random
@@ -7,23 +8,40 @@ from animation import AssetManager
 from streaming import Streamer
 from content import Stream, TitleCard, DungeonWalk, VideoClip
 
+
+def log(message: str) -> None:
+    """Log to stderr to avoid corrupting stdout stream."""
+    print(message, file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--url', type=str, default='', help='RTMP URL')
     parser.add_argument('--output', type=str, default='output.flv', help='File output')
+    parser.add_argument('--stdout', action='store_true', help='Output FLV to stdout for piping')
     parser.add_argument('--width', type=int, default=1280)
     parser.add_argument('--height', type=int, default=720)
     parser.add_argument('--fps', type=int, default=30)
+    parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducibility')
     parser.add_argument('--map-width', type=int, default=3, help='Map width in rooms')
     parser.add_argument('--map-height', type=int, default=3, help='Map height in rooms')
     args = parser.parse_args()
+
+    # Set random seed if specified
+    if args.seed is not None:
+        random.seed(args.seed)
+        log(f"Using random seed: {args.seed}")
+
+    # Validate arguments
+    if args.stdout and args.output != 'output.flv':
+        print("Error: Cannot specify both --stdout and --output", file=sys.stderr)
+        sys.exit(1)
 
     # Load Assets
     try:
         assets = AssetManager()
         assets.load_images()
     except Exception as e:
-        print(f"Error loading assets: {e}")
+        log(f"Error loading assets: {e}")
         return
 
     # Initialize Stream Loop
@@ -37,15 +55,15 @@ def main():
     video_files = glob.glob(os.path.join('large_media', '*.mp4'))
     if video_files:
         video_path = random.choice(video_files)
-        print(f"Selected video clip: {video_path}")
+        log(f"Selected video clip: {video_path}")
         stream.add_content(VideoClip(video_path), 20.0)
     else:
-        print("Warning: No MP4 videos found in large_media directory")
+        log("Warning: No MP4 videos found in large_media directory")
    
     stream.start()
 
     # Setup Streamer
-    target = args.url if args.url else args.output
+    target = "-" if args.stdout else args.output
     streamer = Streamer(args.width, args.height, args.fps, target)
     streamer.start()
 
@@ -75,7 +93,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        print("Stopping stream...")
+        log("Stopping stream...")
         streamer.close()
 
 if __name__ == '__main__':

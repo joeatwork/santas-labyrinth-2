@@ -1,6 +1,6 @@
 import cv2
+import sys
 import numpy as np
-import time
 import random
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Optional, Any
@@ -9,6 +9,10 @@ from animation import AssetManager, Image, create_dungeon_background, render_fra
 from world import Dungeon, Hero
 
 class Content(ABC):
+    """
+    A unit of Content is a scene or segment that can be streamed. Callers can organize and select different units of Content
+    over time.
+    """
     @abstractmethod
     def enter(self) -> None:
         """Called when this content becomes active."""
@@ -30,7 +34,7 @@ class TitleCard(Content):
         self.image = cv2.imread(image_path)
         if self.image is None:
             # Fallback to black if missing
-            print(f"Warning: Could not load title card {image_path}")
+            print(f"Warning: Could not load title card {image_path}", file=sys.stderr)
             self.image = None
         
     def enter(self) -> None:
@@ -56,7 +60,7 @@ class DungeonWalk(Content):
         self.background: Optional[Image] = None
 
     def enter(self) -> None:
-        print("Entering DungeonWalk: Generating new world...")
+        print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
         self.dungeon = Dungeon(self.map_width, self.map_height)
         self.hero = Hero(self.dungeon.start_pos[0], self.dungeon.start_pos[1])
         self.background = create_dungeon_background(self.dungeon.map, self.assets)
@@ -83,7 +87,7 @@ class VideoClip(Content):
         
         self.cap = cv2.VideoCapture(self.video_path)
         if not self.cap.isOpened():
-            print(f"Error: Could not open video {self.video_path}")
+            print(f"Error: Could not open video {self.video_path}", file=sys.stderr)
             return
             
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -101,7 +105,7 @@ class VideoClip(Content):
              start_frame = random.randint(0, max_start)
              
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        print(f"Playing video {self.video_path} from frame {start_frame}...")
+        print(f"Playing video {self.video_path} from frame {start_frame}...", file=sys.stderr)
 
     def update(self, dt: float) -> None:
         pass

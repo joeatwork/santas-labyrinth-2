@@ -1,6 +1,7 @@
 import cv2
-import numpy as np
 import os
+import sys
+import numpy as np
 from dungeon_gen import Tile, DungeonMap
 from world import Hero
 from typing import Dict, Any, Optional, Tuple
@@ -142,7 +143,7 @@ def create_dungeon_background(dungeon_map: DungeonMap, assets: AssetManager) -> 
     # Create black background
     bg: Image = np.zeros((height, width, 3), np.uint8)
     
-    print(f"Generating dungeon background: {width}x{height}...")
+    print(f"Generating dungeon background: {width}x{height}...", file=sys.stderr)
     
     for r in range(rows):
         for c in range(cols):

@@ -1,6 +1,6 @@
 # Animation Streamer
 
-This tool generates a synthetic animation using assets from *Santa's Labyrinth* and streams it via RTMP or saves it to an FLV file using `ffmpeg`.
+This tool generates a synthetic animation using assets from *Santa's Labyrinth* and saves it to an FLV file or streams it via RTMP using `ffmpeg`.
 
 This project was created with heavy use of LLM coding agents.
 
@@ -12,7 +12,7 @@ This project was created with heavy use of LLM coding agents.
         ```bash
         curl -LsSf https://astral.sh/uv/install.sh | sh
         ```
-3.  **FFmpeg**: This tool requires `ffmpeg` to be installed and available in your system's PATH.
+3.  **FFmpeg**: Required for RTMP streaming. Install and add to your system's PATH.
     *   **macOS**: `brew install ffmpeg`
     *   **Ubuntu/Debian**: `sudo apt install ffmpeg`
     *   **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
@@ -30,48 +30,61 @@ This project was created with heavy use of LLM coding agents.
 
 ## Usage
 
-You can run the script using `uv run`.
+### 1. Save to File
 
-### 1. Save to File (Testing)
-
-By default, without a `--url` argument, the script will save the output to `output.flv`.
+By default, the script saves output to `output.flv`.
 
 ```bash
 uv run stream_animation.py
 ```
 
 **Options:**
-*   `--output <filename>`: Specify detailed output filename (default: `output.flv`).
-*   `--width <int>`: Video width (default: 800).
-*   `--height <int>`: Video height (default: 600).
-*   `--fps <int>`: Frames per second (default: 30).
+*   `--output <filename>`: Output filename (default: `output.flv`)
+*   `--width <int>`: Video width (default: 1280)
+*   `--height <int>`: Video height (default: 720)
+*   `--fps <int>`: Frames per second (default: 30)
+*   `--map-width <int>`: Dungeon map width in rooms (default: 3)
+*   `--map-height <int>`: Dungeon map height in rooms (default: 3)
 
 **Example:**
 ```bash
-uv run stream_animation.py --output my_animation.flv --width 1280 --height 720
+uv run stream_animation.py --output my_animation.flv --width 1920 --height 1080
 ```
 
-### 2. Stream to RTMP
+### 2. Stream to Twitch
 
-To stream to an RTMP server (e.g., YouTube Live, Twitch, or a local Nginx RTMP module), use the `--url` argument.
+Use the provided shell script to stream directly to Twitch:
+
+1.  Create a file named `TWITCH_STREAM_KEY` containing your stream key
+2.  Run the script:
 
 ```bash
-uv run stream_animation.py --url rtmp://localhost/live/stream_key
+chmod +x stream_to_twitch.sh
+./stream_to_twitch.sh
 ```
 
-Here is the current US East Twitch RTMP URL:
+You can pass additional options through to the animation script:
 
-```
-rtmp://iad05.contribute.live-video.net/app/$TWITCH_STREAM_KEY
+```bash
+./stream_to_twitch.sh --width 1920 --height 1080 --fps 60
 ```
 
-**Note:** Ensure your RTMP server is running and accessible.
+**Twitch RTMP URL used:** `rtmp://iad05.contribute.live-video.net/app/`
+
+### 3. Stream to Other RTMP Servers
+
+Use the `--stdout` flag to pipe FLV output to ffmpeg:
+
+```bash
+uv run stream_animation.py --stdout | ffmpeg -re -i pipe:0 -c copy -f flv rtmp://your-server/app/key
+```
 
 ## Project Structure
 
 *   `stream_animation.py`: Entry point script. Orchestrates the animation loop and streaming.
+*   `streaming.py`: Handles video encoding using PyAV.
 *   `animation.py`: Handles asset loading (`AssetManager`) and frame rendering.
-*   `streaming.py`: Handles the `FFmpeg` process via `subprocess`.
+*   `stream_to_twitch.sh`: Shell script to stream to Twitch via ffmpeg.
 *   `assets/`: Contains game sprites and tiles.
 
 ## Testing
@@ -82,8 +95,9 @@ rtmp://iad05.contribute.live-video.net/app/$TWITCH_STREAM_KEY
 3.  Press `Ctrl+C` to stop.
 4.  Open `output.flv` with a video player like VLC to verify the animation.
 
-### Testing RTMP Streaming
-1.  Start your RTMP server.
-2.  Run the script: `uv run stream_animation.py --url rtmp://your-server/app/key`
-3.  Open a media player (like VLC) and point it to your RTMP URL.
-4.  Verify the animation is playing live.
+### Testing Stdout Output
+```bash
+uv run stream_animation.py --stdout > test.flv
+# Press Ctrl+C after a few seconds
+ffprobe test.flv  # Verify the file is valid
+```
