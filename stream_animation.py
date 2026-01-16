@@ -5,7 +5,7 @@ import os
 import random
 import glob
 from animation import AssetManager
-from streaming import Streamer
+from streaming import FFmpegStreamer
 from content import Stream, TitleCard, DungeonWalk, VideoClip
 
 
@@ -47,44 +47,67 @@ def main():
     # Initialize Stream Loop
     stream = Stream()
     
+    video_files = glob.glob(os.path.join('large_media', '*.mp4'))
+    if video_files:
+        video_path = random.choice(video_files)
+        log(f"Selected video clip: {video_path}")
+        stream.add_content(VideoClip(video_path), 45.0)
+    else:
+        log("Warning: No MP4 videos found in large_media directory")
+    
     title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
     stream.add_content(TitleCard(title_path, assets), 15.0)
       
     stream.add_content(DungeonWalk(args.map_width, args.map_height, assets), 40.0)
    
-    video_files = glob.glob(os.path.join('large_media', '*.mp4'))
-    if video_files:
-        video_path = random.choice(video_files)
-        log(f"Selected video clip: {video_path}")
-        stream.add_content(VideoClip(video_path), 20.0)
-    else:
-        log("Warning: No MP4 videos found in large_media directory")
-   
+     
     stream.start()
 
     # Setup Streamer
     target = "-" if args.stdout else args.output
-    streamer = Streamer(args.width, args.height, args.fps, target)
+    audio_sample_rate = 44100
+    audio_channels = 2
+    streamer = FFmpegStreamer(args.width, args.height, args.fps, target,
+                               audio_sample_rate, audio_channels)
     streamer.start()
+
+    # Audio samples needed per video frame
+    samples_per_frame = audio_sample_rate // args.fps
 
     start_time = time.time()
     last_frame_time = start_time
-    
+    frame_count = 0
+
     try:
         while True:
             current_time = time.time()
             dt = current_time - last_frame_time
             last_frame_time = current_time
-            
+
             # Update Stream
             stream.update(dt)
-            
+
             # Render Stream
             frame = stream.render(args.width, args.height)
-            
+
             if not streamer.write_frame(frame):
                 break
-            
+
+            # Get audio from content (or use silence if none available)
+            audio = stream.get_audio(samples_per_frame, audio_sample_rate, audio_channels)
+            if audio is not None:
+                if not streamer.write_audio(audio):
+                    break
+            else:
+                if not streamer.write_silence(1):
+                    break
+
+            frame_count += 1
+
+            # Progress indicator every second
+            if frame_count % args.fps == 0:
+                log(f"Frame {frame_count} ({frame_count // args.fps}s)")
+
             # Maintain FPS
             elapsed = time.time() - current_time
             sleep_time = max(0, (1.0/args.fps) - elapsed)

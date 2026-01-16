@@ -1,3 +1,4 @@
+import av
 import cv2
 import sys
 import numpy as np
@@ -27,6 +28,14 @@ class Content(ABC):
     def render(self, width: int, height: int) -> Image:
         """Render frame."""
         pass
+
+    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+        """
+        Get audio samples for the current frame.
+        Returns None if no audio is available (silence will be used).
+        Shape should be (num_samples, channels), dtype int16.
+        """
+        return None
 
 class TitleCard(Content):
     def __init__(self, image_path: str, asset_manager: AssetManager):
@@ -75,50 +84,163 @@ class DungeonWalk(Content):
         return np.zeros((height, width, 3), np.uint8)
 
 class VideoClip(Content):
+    """
+    Video clip content that plays both video and audio from a file.
+    Uses PyAV for decoding to get synchronized audio.
+    """
+
     def __init__(self, video_path: str):
         self.video_path = video_path
-        self.cap: Optional[cv2.VideoCapture] = None
-        self.total_frames: int = 0
+        self.container: Optional[av.container.InputContainer] = None
+        self.video_stream: Optional[av.stream.Stream] = None
+        self.audio_stream: Optional[av.stream.Stream] = None
         self.fps: float = 30.0
+        self.audio_sample_rate: int = 44100
+
+        # Decoded frame/audio buffers
+        self.current_frame: Optional[np.ndarray] = None
+        self.audio_buffer: np.ndarray = np.zeros((0, 2), dtype=np.int16)
+
+        # Audio resampler for consistent output format
+        self.audio_resampler: Optional[av.audio.resampler.AudioResampler] = None
 
     def enter(self) -> None:
-        if self.cap is not None:
-             self.cap.release()
-        
-        self.cap = cv2.VideoCapture(self.video_path)
-        if not self.cap.isOpened():
-            print(f"Error: Could not open video {self.video_path}", file=sys.stderr)
+        if self.container is not None:
+            self.container.close()
+
+        try:
+            self.container = av.open(self.video_path)
+        except Exception as e:
+            print(f"Error: Could not open video {self.video_path}: {e}", file=sys.stderr)
             return
-            
-        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        if self.fps <= 0:
-            self.fps = 30.0
-            
-        # Required frames for 30s playback
-        req_seconds = 30.0
-        req_frames = int(req_seconds * self.fps)
-        
-        start_frame = 0
-        if self.total_frames > req_frames:
-             max_start = self.total_frames - req_frames
-             start_frame = random.randint(0, max_start)
-             
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        print(f"Playing video {self.video_path} from frame {start_frame}...", file=sys.stderr)
+
+        # Get video stream
+        video_streams = [s for s in self.container.streams if s.type == 'video']
+        if video_streams:
+            self.video_stream = video_streams[0]
+            self.fps = float(self.video_stream.average_rate) if self.video_stream.average_rate else 30.0
+        else:
+            print(f"Warning: No video stream in {self.video_path}", file=sys.stderr)
+            self.video_stream = None
+
+        # Get audio stream
+        audio_streams = [s for s in self.container.streams if s.type == 'audio']
+        if audio_streams:
+            self.audio_stream = audio_streams[0]
+            # Create resampler to convert to our output format (44100Hz stereo s16)
+            self.audio_resampler = av.audio.resampler.AudioResampler(
+                format='s16',
+                layout='stereo',
+                rate=self.audio_sample_rate,
+            )
+            print(f"Audio stream: {self.audio_stream.sample_rate}Hz -> {self.audio_sample_rate}Hz", file=sys.stderr)
+        else:
+            print(f"Warning: No audio stream in {self.video_path}", file=sys.stderr)
+            self.audio_stream = None
+            self.audio_resampler = None
+
+        # Seek to random position for variety
+        if self.video_stream and self.container.duration:
+            duration_sec = self.container.duration / av.time_base
+            if duration_sec > 30:
+                # Pick a random start point, leaving room for 30s of content
+                max_start = duration_sec - 30
+                start_sec = random.uniform(0, max_start)
+                start_pts = int(start_sec / av.time_base)
+                self.container.seek(start_pts)
+                print(f"Playing video {self.video_path} from {start_sec:.1f}s...", file=sys.stderr)
+            else:
+                print(f"Playing video {self.video_path} from start...", file=sys.stderr)
+
+        # Clear buffers
+        self.current_frame = None
+        self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
+
+        # Pre-decode first frame
+        self._decode_next()
+
+    def _decode_next(self) -> None:
+        """Decode the next video frame and associated audio."""
+        if self.container is None:
+            return
+
+        try:
+            for packet in self.container.demux(self.video_stream, self.audio_stream):
+                if packet.stream == self.video_stream:
+                    for frame in packet.decode():
+                        # Convert to BGR for OpenCV compatibility
+                        img = frame.to_ndarray(format='bgr24')
+                        self.current_frame = img
+                        return  # Got a video frame, stop
+
+                elif packet.stream == self.audio_stream and self.audio_resampler:
+                    for frame in packet.decode():
+                        # Resample to target format
+                        resampled = self.audio_resampler.resample(frame)
+                        if resampled:
+                            for rf in resampled:
+                                # Convert to numpy
+                                arr = rf.to_ndarray()
+
+                                # Handle different array shapes from resampler
+                                # Could be (channels, samples) or (samples,)
+                                if arr.ndim == 1:
+                                    # Mono: (samples,) -> (samples, 2) stereo
+                                    arr = np.column_stack([arr, arr])
+                                elif arr.ndim == 2:
+                                    if arr.shape[0] <= 2:
+                                        # Planar format: (channels, samples) -> (samples, channels)
+                                        arr = arr.T
+                                    # else: already (samples, channels)
+
+                                # Ensure stereo
+                                if arr.ndim == 2 and arr.shape[1] == 1:
+                                    arr = np.column_stack([arr, arr])
+
+                                # Ensure int16
+                                if arr.dtype != np.int16:
+                                    if arr.dtype in (np.float32, np.float64):
+                                        arr = (arr * 32767).astype(np.int16)
+                                    else:
+                                        arr = arr.astype(np.int16)
+
+                                # Append to buffer
+                                if arr.shape[1] == 2:  # Only append if correct shape
+                                    self.audio_buffer = np.vstack([self.audio_buffer, arr])
+
+        except av.error.EOFError:
+            pass
+        except Exception as e:
+            print(f"Error decoding: {e}", file=sys.stderr)
 
     def update(self, dt: float) -> None:
         pass
 
     def render(self, width: int, height: int) -> Image:
-        if self.cap is None or not self.cap.isOpened():
+        # Decode next frame
+        self._decode_next()
+
+        if self.current_frame is None:
             return np.zeros((height, width, 3), np.uint8)
-            
-        ret, frame = self.cap.read()
-        if not ret:
-            return np.zeros((height, width, 3), np.uint8)
-            
-        return cv2.resize(frame, (width, height))
+
+        return cv2.resize(self.current_frame, (width, height))
+
+    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+        """Return audio samples for this frame."""
+        if len(self.audio_buffer) < num_samples:
+            # Not enough audio buffered, return what we have padded with silence
+            if len(self.audio_buffer) == 0:
+                return None  # No audio, use silence
+
+            result = np.zeros((num_samples, channels), dtype=np.int16)
+            result[:len(self.audio_buffer)] = self.audio_buffer[:, :channels]
+            self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
+            return result
+
+        # Return requested samples and keep the rest buffered
+        result = self.audio_buffer[:num_samples, :channels].copy()
+        self.audio_buffer = self.audio_buffer[num_samples:]
+        return result
 
 class Stream:
     def __init__(self):
@@ -143,7 +265,7 @@ class Stream:
 
         self.time_in_current += dt
         current_content, duration = self.playlist[self.current_index]
-        
+
         current_content.update(dt)
 
         if self.time_in_current >= duration:
@@ -155,5 +277,12 @@ class Stream:
     def render(self, width: int, height: int) -> Image:
         if not self.playlist:
             return np.zeros((height, width, 3), np.uint8)
-        
+
         return self.playlist[self.current_index][0].render(width, height)
+
+    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+        """Get audio from current content."""
+        if not self.playlist:
+            return None
+
+        return self.playlist[self.current_index][0].get_audio(num_samples, sample_rate, channels)
