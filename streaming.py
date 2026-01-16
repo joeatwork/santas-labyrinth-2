@@ -53,23 +53,36 @@ class FFmpegStreamer:
             # Audio encoding
             "-c:a", "aac",
             "-ar", str(self.audio_sample_rate),
-            # Output format
-            "-f", "flv",
         ]
 
-        # Determine output destination
-        if self.output_target == "-":
-            cmd.append("pipe:1")
-            print("Starting FFmpeg stream to: stdout", file=sys.stderr)
-        elif self.output_target.startswith("rtmp://"):
-            # Direct RTMP streaming
+        # Determine output destination and add appropriate options
+        is_rtmp = self.output_target.startswith("rtmp://")
+
+        if is_rtmp:
+            # RTMP-specific buffering and rate control
+            cmd.extend([
+                # Rate control for smoother streaming
+                "-maxrate", "3000k",
+                "-bufsize", "6000k",  # 2 seconds of buffer at 3Mbps
+                # Keyframe interval (every 2 seconds for Twitch)
+                "-g", str(self.fps * 2),
+                # FLV flags to avoid header update issues
+                "-flvflags", "no_duration_filesize",
+                # Output format
+                "-f", "flv",
+            ])
             cmd.append(self.output_target)
             print(f"Starting FFmpeg stream to RTMP: {self.output_target[:50]}...", file=sys.stderr)
+        elif self.output_target == "-":
+            cmd.extend(["-f", "flv"])
+            cmd.append("pipe:1")
+            print("Starting FFmpeg stream to: stdout", file=sys.stderr)
         else:
+            cmd.extend(["-f", "flv"])
             cmd.append(self.output_target)
             print(f"Starting FFmpeg stream to file: {self.output_target}", file=sys.stderr)
 
-        print(f"FFmpeg command: {' '.join(cmd[:15])}...", file=sys.stderr)
+        print(f"FFmpeg command: {' '.join(cmd[:20])}...", file=sys.stderr)
 
         # Start ffmpeg
         # Only redirect stdout if we're piping to stdout
