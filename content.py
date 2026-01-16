@@ -242,7 +242,10 @@ class VideoClip(Content):
         self.audio_buffer = self.audio_buffer[num_samples:]
         return result
 
-class Stream:
+class VideoProgram:
+    """
+    A Stream is a sequence of content objects, that are played one after another.
+    """
     def __init__(self):
         # List of (Content, duration_seconds)
         self.playlist: List[Tuple[Content, float]] = []

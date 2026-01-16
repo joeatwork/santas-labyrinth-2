@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stream animation to Twitch via ffmpeg
+# Stream animation directly to Twitch
 #
 # Usage: ./stream_to_twitch.sh [OPTIONS]
 #
@@ -23,5 +23,4 @@ RTMP_URL="rtmp://iad05.contribute.live-video.net/app/${STREAM_KEY}"
 
 echo "Streaming to Twitch..." >&2
 
-uv run stream_animation.py --stdout "$@" | \
-    ffmpeg -re -i pipe:0 -c copy -f flv "$RTMP_URL"
+uv run stream_animation.py --rtmp "$RTMP_URL" "$@"

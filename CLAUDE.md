@@ -26,20 +26,31 @@ uv run stream_animation.py --width 1920 --height 1080 --fps 60 --map-width 5 --m
 
 ## Architecture Overview
 
-This is a **procedural animation streaming system** that generates synthetic dungeon exploration animations and streams them via RTMP. The system is composed of several key layers:
+This is an animation streaming system, intended to stream different kinds of generative audio and video content via RTMP.
 
 ### Core Architecture
 
-**Content Pipeline**: `Content` abstract base class defines scenes that can be composed into streams:
+#### Content and VideoProgram
+
+The system has a number of different sorts of content that act as "Scenes" in the video stream. Right now
+those scenes fall into a few varieties:
+
 - `TitleCard`: Static image content
 - `DungeonWalk`: Procedural dungeon exploration with hero movement
 - `VideoClip`: Pre-recorded video segments from `large_media/` directory
-- `Stream`: Orchestrator that sequences different content types over time
 
-**Streaming Pipeline**:
-- `stream_animation.py`: Entry point that creates content sequence and manages streaming loop
-- `streaming.py`: `Streamer` class handles video/audio encoding using PyAV (outputs FLV)
-- `stream_to_twitch.sh`: FFmpeg wrapper for RTMP streaming to Twitch
+It's likely that we'll add new varieties of content as the system grows.
+
+Content is organized into a VideoProgram, which is an ordered, looping collection of content objects.
+
+#### Streaming pipeline
+
+The top level script, stream_animation.py, constructs and queries a VideoProgram, and uses
+an FfmpegStreamer to manage pushing the audio and video into an ffmpeg subprocess. That subprocess
+is responsible for the coding and streaming the video and audio into an flv suitable for streaming.
+
+The flv stream is consumed by another ffmpeg process in stream_to_twitch.sh, which handles copying
+the inbound stream to an RTMP output.
 
 **World Generation**:
 - `dungeon_gen.py`: Maze generation algorithms using DFS, outputs `DungeonMap` tile arrays
@@ -58,15 +69,6 @@ This is a **procedural animation streaming system** that generates synthetic dun
 - **Sprites**: `assets/sprites/` contains tiled sprite sheets, `SPRITE_OFFSETS` in `animation.py` defines tile coordinates
 - **Large Media**: `large_media/` contains video files that can be randomly selected as `VideoClip` content
 - **Rendering**: Uses OpenCV (cv2) for image manipulation, 64x64 pixel tiles, camera system with world-to-screen coordinate translation
-
-### Streaming Architecture Notes
-
-**Known Issues**:
-- Audio/video sync problems in `stream_animation.py` lines 77-99 (produces video in chunks before audio)
-- Only silence audio is generated (line 98), no audio extraction from video clips
-- Large buffering delays due to 30-second video chunks before audio processing
-
-**Testing**: Use `test_stream.py` and `test_stream_to_twitch.sh` to bypass animation system and test RTMP pipeline with known good media files.
 
 ## Key Configuration
 

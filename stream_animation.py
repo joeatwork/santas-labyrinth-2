@@ -6,7 +6,7 @@ import random
 import glob
 from animation import AssetManager
 from streaming import FFmpegStreamer
-from content import Stream, TitleCard, DungeonWalk, VideoClip
+from content import VideoProgram, TitleCard, DungeonWalk, VideoClip
 
 
 def log(message: str) -> None:
@@ -18,6 +18,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=str, default='output.flv', help='File output')
     parser.add_argument('--stdout', action='store_true', help='Output FLV to stdout for piping')
+    parser.add_argument('--rtmp', type=str, help='RTMP URL to stream to (e.g., rtmp://server/app/key)')
     parser.add_argument('--width', type=int, default=1280)
     parser.add_argument('--height', type=int, default=720)
     parser.add_argument('--fps', type=int, default=30)
@@ -32,8 +33,9 @@ def main():
         log(f"Using random seed: {args.seed}")
 
     # Validate arguments
-    if args.stdout and args.output != 'output.flv':
-        print("Error: Cannot specify both --stdout and --output", file=sys.stderr)
+    num_outputs = sum([args.stdout, args.rtmp is not None, args.output != 'output.flv'])
+    if num_outputs > 1:
+        print("Error: Cannot specify multiple output targets (--stdout, --rtmp, --output)", file=sys.stderr)
         sys.exit(1)
 
     # Load Assets
@@ -45,26 +47,31 @@ def main():
         return
 
     # Initialize Stream Loop
-    stream = Stream()
+    video_program = VideoProgram()
     
     video_files = glob.glob(os.path.join('large_media', '*.mp4'))
     if video_files:
         video_path = random.choice(video_files)
         log(f"Selected video clip: {video_path}")
-        stream.add_content(VideoClip(video_path), 45.0)
+        video_program.add_content(VideoClip(video_path), 45.0)
     else:
         log("Warning: No MP4 videos found in large_media directory")
     
     title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
-    stream.add_content(TitleCard(title_path, assets), 15.0)
+    video_program.add_content(TitleCard(title_path, assets), 15.0)
       
-    stream.add_content(DungeonWalk(args.map_width, args.map_height, assets), 40.0)
+    video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 40.0)
    
      
-    stream.start()
+    video_program.start()
 
     # Setup Streamer
-    target = "-" if args.stdout else args.output
+    if args.rtmp:
+        target = args.rtmp
+    elif args.stdout:
+        target = "-"
+    else:
+        target = args.output
     audio_sample_rate = 44100
     audio_channels = 2
     streamer = FFmpegStreamer(args.width, args.height, args.fps, target,
@@ -85,16 +92,16 @@ def main():
             last_frame_time = current_time
 
             # Update Stream
-            stream.update(dt)
+            video_program.update(dt)
 
             # Render Stream
-            frame = stream.render(args.width, args.height)
+            frame = video_program.render(args.width, args.height)
 
             if not streamer.write_frame(frame):
                 break
 
             # Get audio from content (or use silence if none available)
-            audio = stream.get_audio(samples_per_frame, audio_sample_rate, audio_channels)
+            audio = video_program.get_audio(samples_per_frame, audio_sample_rate, audio_channels)
             if audio is not None:
                 if not streamer.write_audio(audio):
                     break
