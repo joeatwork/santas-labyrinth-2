@@ -53,7 +53,7 @@ def main():
     if video_files:
         video_path = random.choice(video_files)
         log(f"Selected video clip: {video_path}")
-        video_program.add_content(VideoClip(video_path), 45.0)
+        video_program.add_content(VideoClip(video_path, 60), 45.0)
     else:
         log("Warning: No MP4 videos found in large_media directory")
     

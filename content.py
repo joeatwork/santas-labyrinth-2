@@ -89,13 +89,14 @@ class VideoClip(Content):
     Uses PyAV for decoding to get synchronized audio.
     """
 
-    def __init__(self, video_path: str):
+    def __init__(self, video_path: str, max_length_seconds: int):
         self.video_path = video_path
         self.container: Optional[av.container.InputContainer] = None
         self.video_stream: Optional[av.stream.Stream] = None
         self.audio_stream: Optional[av.stream.Stream] = None
         self.fps: float = 30.0
         self.audio_sample_rate: int = 44100
+        self.max_length_seconds = max_length_seconds
 
         # Decoded frame/audio buffers
         self.current_frame: Optional[np.ndarray] = None
@@ -119,6 +120,7 @@ class VideoClip(Content):
         if video_streams:
             self.video_stream = video_streams[0]
             self.fps = float(self.video_stream.average_rate) if self.video_stream.average_rate else 30.0
+
         else:
             print(f"Warning: No video stream in {self.video_path}", file=sys.stderr)
             self.video_stream = None
@@ -141,14 +143,14 @@ class VideoClip(Content):
 
         # Seek to random position for variety
         if self.video_stream and self.container.duration:
-            duration_sec = self.container.duration / av.time_base
-            if duration_sec > 30:
+            end_buffer_time = av.time_base * self.max_length_seconds
+            if self.container.duration > end_buffer_time:
                 # Pick a random start point, leaving room for 30s of content
-                max_start = duration_sec - 30
-                start_sec = random.uniform(0, max_start)
-                start_pts = int(start_sec / av.time_base)
+                max_start = self.container.duration - end_buffer_time
+                start_pts = random.randint(0, max_start)
+                start_sec = start_pts / av.time_base
                 self.container.seek(start_pts)
-                print(f"Playing video {self.video_path} from {start_sec:.1f}s...", file=sys.stderr)
+                print(f"Playing video {self.video_path} from {start_sec:.1f}s {start_pts}pts...", file=sys.stderr)
             else:
                 print(f"Playing video {self.video_path} from start...", file=sys.stderr)
 
