@@ -53,6 +53,10 @@ The flv stream is consumed by another ffmpeg process in stream_to_twitch.sh, whi
 the inbound stream to an RTMP output.
 
 **World Generation**:
+
+The DungeonWalk content type is is a top down dungeon crawl video game, where a robot walks through a
+maze-like dungeon. The code below generates that dungeon
+
 - `dungeon_gen.py`: Maze generation algorithms using DFS, outputs `DungeonMap` tile arrays
 - `world.py`: `Dungeon` class (world state) and `Hero` class (player character with movement/collision)
 - `animation.py`: `AssetManager` (sprite loading) + rendering functions that convert world state to pixels
@@ -76,3 +80,8 @@ the inbound stream to an RTMP output.
 - **Room Dimensions**: 12x10 tiles per room (`ROOM_WIDTH`, `ROOM_HEIGHT`)
 - **Video Output**: Defaults to 1280x720 at 30fps, H.264/AAC encoding in FLV container
 - **RTMP Endpoint**: Uses Twitch ingest server `rtmp://iad05.contribute.live-video.net/app/`
+
+## Known Issues
+
+The audio output for VideoClip is distorted and slowed down. We need to come up with a way to test our resampling
+of audio or the way we're packaging it into NUT form.

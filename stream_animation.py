@@ -46,22 +46,18 @@ def main():
         log(f"Error loading assets: {e}")
         return
 
+    title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
+
     # Initialize Stream Loop
     video_program = VideoProgram()
     
     video_files = glob.glob(os.path.join('large_media', '*.mp4'))
-    if video_files:
-        video_path = random.choice(video_files)
-        log(f"Selected video clip: {video_path}")
-        video_program.add_content(VideoClip(video_path, 60), 45.0)
-    else:
-        log("Warning: No MP4 videos found in large_media directory")
-    
-    title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
-    video_program.add_content(TitleCard(title_path, assets), 15.0)
-      
-    video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 40.0)
-   
+    random.shuffle(video_files)
+
+    for video_path in video_files:
+        video_program.add_content(TitleCard(title_path, assets), 15.0)
+        video_program.add_content(VideoClip(video_path, 30), 20.0)
+        video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 30.0)
      
     video_program.start()
 
