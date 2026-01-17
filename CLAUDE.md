@@ -32,16 +32,18 @@ This is an animation streaming system, intended to stream different kinds of gen
 
 #### Content and VideoProgram
 
-The system has a number of different sorts of content that act as "Scenes" in the video stream. Right now
-those scenes fall into a few varieties:
+All content types inherit from the `Content` abstract base class in `content.py`, which defines:
+- `enter()`: Called when content becomes active
+- `update(dt)`: Update logic each frame
+- `render(width, height)`: Returns the current frame as a numpy array
+- `get_audio(num_samples, sample_rate, channels)`: Returns audio samples (optional)
 
+Current content types:
 - `TitleCard`: Static image content
 - `DungeonWalk`: Procedural dungeon exploration with hero movement
-- `VideoClip`: Pre-recorded video segments from `large_media/` directory
+- `VideoClip`: Pre-recorded video segments from `large_media/` directory (uses PyAV for decoding)
 
-It's likely that we'll add new varieties of content as the system grows.
-
-Content is organized into a VideoProgram, which is an ordered, looping collection of content objects.
+Content is organized into a `VideoProgram`, which is an ordered, looping collection of content objects with durations.
 
 #### Streaming pipeline
 
@@ -63,7 +65,7 @@ maze-like dungeon. The code below generates that dungeon
 
 ### Key Data Flow
 
-1. **Content Creation**: `stream_animation.py` creates a `Stream` and adds content segments (title card, dungeon walk, video clips)
+1. **Content Creation**: `stream_animation.py` creates a `VideoProgram` and adds content segments (title card, dungeon walk, video clips)
 2. **World Simulation**: `DungeonWalk` content generates procedural dungeons, simulates hero movement with collision detection
 3. **Rendering**: `AssetManager` loads sprite tiles, `render_frame_camera` converts world coordinates to screen pixels
 4. **Streaming**: `Streamer` encodes frames to FLV format, can output to file or stdout for RTMP piping
