@@ -27,6 +27,9 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     
     # Floor (death_mountain)
     'floor': {'x': 64, 'y': 64, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+
+    # Goal
+    'goal': {'x': 0, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/red_heart.png'},
     
     # Hero Walk Cycles (spaceman)
     # South
@@ -62,7 +65,12 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.NE_CORNER: 'wall_ne_corner',
     Tile.SW_CORNER: 'wall_sw_corner',
     Tile.SE_CORNER: 'wall_se_corner',
-    # Treat unknown tiles as floor for now
+    Tile.GOAL: 'goal',
+    # Door tiles render as floor
+    Tile.NORTH_DOOR: 'floor',
+    Tile.SOUTH_DOOR: 'floor',
+    Tile.EAST_DOOR: 'floor',
+    Tile.WEST_DOOR: 'floor',
     Tile.NOTHING: None
 }
 
@@ -149,8 +157,12 @@ def create_dungeon_background(dungeon_map: DungeonMap, assets: AssetManager) -> 
         for c in range(cols):
             tile_type = dungeon_map[r, c]
             sprite_name = TILE_MAP.get(tile_type)
-            
+
             if sprite_name:
+                # For goal tile, render floor underneath first (heart has transparent bg)
+                if tile_type == Tile.GOAL:
+                    floor_sprite = assets.get_sprite('floor')
+                    overlay_image(bg, floor_sprite, c * TILE_SIZE, r * TILE_SIZE)
                 sprite = assets.get_sprite(sprite_name)
                 # sprite is guaranteed Image by type hint, but might fail logic if key missing
                 # get_sprite raises keyerror if missing, so we are safe assuming returns Image

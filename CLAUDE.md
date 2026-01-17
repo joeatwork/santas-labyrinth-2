@@ -22,6 +22,9 @@ uv run stream_animation.py --width 1920 --height 1080 --fps 60 --map-width 5 --m
 # Test streaming with known good media
 ./test_stream_to_twitch.sh --test-only --duration 10
 ./test_stream.py --test-only --duration 30
+
+# Run unit tests
+uv run python -m pytest tests/ -v
 ```
 
 ## Architecture Overview
@@ -59,8 +62,8 @@ the inbound stream to an RTMP output.
 The DungeonWalk content type is is a top down dungeon crawl video game, where a robot walks through a
 maze-like dungeon. The code below generates that dungeon
 
-- `dungeon_gen.py`: Maze generation algorithms using DFS, outputs `DungeonMap` tile arrays
-- `world.py`: `Dungeon` class (world state) and `Hero` class (player character with movement/collision)
+- `dungeon_gen.py`: Maze generation algorithms using DFS, outputs `DungeonMap` tile arrays. Includes a goal tile placed in the end room.
+- `world.py`: `Dungeon` class (world state) and `Hero` class (player character with navigation AI). The hero navigates toward the goal using door-based pathfinding.
 - `animation.py`: `AssetManager` (sprite loading) + rendering functions that convert world state to pixels
 
 ### Key Data Flow
@@ -82,6 +85,13 @@ maze-like dungeon. The code below generates that dungeon
 - **Room Dimensions**: 12x10 tiles per room (`ROOM_WIDTH`, `ROOM_HEIGHT`)
 - **Video Output**: Defaults to 1280x720 at 30fps, H.264/AAC encoding in FLV container
 - **RTMP Endpoint**: Uses Twitch ingest server `rtmp://iad05.contribute.live-video.net/app/`
+
+## Testing
+
+Unit tests are in `tests/`. The `Hero` class accepts an optional `random_choice` parameter for dependency injection, allowing deterministic testing of navigation logic.
+
+Key test file:
+- `tests/test_hero_navigation.py`: Tests for hero navigation including goal approach, door selection, and entry door avoidance
 
 ## Known Issues
 

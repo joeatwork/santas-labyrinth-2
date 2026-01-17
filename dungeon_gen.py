@@ -21,6 +21,9 @@ class Tile:
     WEST_DOOR: int = 22
     EAST_DOOR: int = 23
 
+    # Goal
+    GOAL: int = 30
+
 # Room size in tiles (from references)
 ROOM_WIDTH: int = 12
 ROOM_HEIGHT: int = 10
@@ -78,48 +81,35 @@ def get_room_template(n_door: bool, e_door: bool, s_door: bool, w_door: bool) ->
     Returns a 2D array of Tiles for a single room based on door presence.
     Based on deathMountainRoom template.
     """
-    # Abbreviations for brevity
-    # Wall corners
-    NWC, NEC, SWC, SEC = Tile.NW_CORNER, Tile.NE_CORNER, Tile.SW_CORNER, Tile.SE_CORNER
-    # Walls
-    NW, EW, SW, WW = Tile.NORTH_WALL, Tile.EAST_WALL, Tile.SOUTH_WALL, Tile.WEST_WALL
-    # Floor
-    F = Tile.FLOOR
-    
     # Top Row
-    row0: List[int] = [NWC] + [NW]*10 + [NEC]
-    
-    # If North Door, open the middle
+    row0: List[int] = [Tile.NW_CORNER] + [Tile.NORTH_WALL] * 10 + [Tile.NE_CORNER]
+
     if n_door:
-        # Indices 5 and 6 are middle-ish (0-11 width)
-        row0[5] = F
-        row0[6] = F
-        
+        row0[5] = Tile.NORTH_DOOR
+        row0[6] = Tile.NORTH_DOOR
+
     # Bottom Row
-    row9: List[int] = [SWC] + [SW]*10 + [SEC]
+    row9: List[int] = [Tile.SW_CORNER] + [Tile.SOUTH_WALL] * 10 + [Tile.SE_CORNER]
+
     if s_door:
-        row9[5] = F
-        row9[6] = F
-        
+        row9[5] = Tile.SOUTH_DOOR
+        row9[6] = Tile.SOUTH_DOOR
+
     # Middle Rows construction
     mid_rows: List[List[int]] = []
     for r in range(1, 9):
-        # West boundary
-        left = WW
-        if w_door and r in [4, 5]: # Middle vertical
-            left = F
-            
-        # East boundary
-        right = EW
+        left = Tile.WEST_WALL
+        if w_door and r in [4, 5]:
+            left = Tile.WEST_DOOR
+
+        right = Tile.EAST_WALL
         if e_door and r in [4, 5]:
-            right = F
-            
-        row = [left] + [F]*10 + [right]
+            right = Tile.EAST_DOOR
+
+        row = [left] + [Tile.FLOOR] * 10 + [right]
         mid_rows.append(row)
-        
-    # Combine
-    furniture = [row0] + mid_rows + [row9]
-    return furniture
+
+    return [row0] + mid_rows + [row9]
 
 
 # Type Definition
@@ -160,6 +150,11 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[Dunge
                 for local_x, val in enumerate(row):
                     dungeon_map[y_offset + local_y, x_offset + local_x] = val
                     
+    # Place goal tile in the center of the end room
+    goal_tile_y = end_room[0] * ROOM_HEIGHT + ROOM_HEIGHT // 2
+    goal_tile_x = end_room[1] * ROOM_WIDTH + ROOM_WIDTH // 2
+    dungeon_map[goal_tile_y, goal_tile_x] = Tile.GOAL
+
     # Calculate start pixel position (approximate center of start room)
     start_pos_pixel = (
         (start_room[1] * ROOM_WIDTH + ROOM_WIDTH//2) * 64, # x
