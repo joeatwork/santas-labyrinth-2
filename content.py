@@ -129,13 +129,14 @@ class VideoClip(Content):
         audio_streams = [s for s in self.container.streams if s.type == 'audio']
         if audio_streams:
             self.audio_stream = audio_streams[0]
-            # Create resampler to convert to our output format (44100Hz stereo s16)
+            # Create resampler to convert to our output format (44100Hz stereo s16 planar)
+            # Using s16p (planar) gives consistent (channels, samples) shape from to_ndarray()
             self.audio_resampler = av.audio.resampler.AudioResampler(
-                format='s16',
+                format='s16p',
                 layout='stereo',
                 rate=self.audio_sample_rate,
             )
-            print(f"Audio stream: {self.audio_stream.sample_rate}Hz -> {self.audio_sample_rate}Hz", file=sys.stderr)
+            print(f"Audio stream: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
         else:
             print(f"Warning: No audio stream in {self.video_path}", file=sys.stderr)
             self.audio_stream = None
@@ -177,38 +178,15 @@ class VideoClip(Content):
 
                 elif packet.stream == self.audio_stream and self.audio_resampler:
                     for frame in packet.decode():
-                        # Resample to target format
+                        # Resample to target format (s16p stereo)
                         resampled = self.audio_resampler.resample(frame)
                         if resampled:
                             for rf in resampled:
-                                # Convert to numpy
+                                # With s16p format, to_ndarray() returns (channels, samples) as int16
                                 arr = rf.to_ndarray()
-
-                                # Handle different array shapes from resampler
-                                # Could be (channels, samples) or (samples,)
-                                if arr.ndim == 1:
-                                    # Mono: (samples,) -> (samples, 2) stereo
-                                    arr = np.column_stack([arr, arr])
-                                elif arr.ndim == 2:
-                                    if arr.shape[0] <= 2:
-                                        # Planar format: (channels, samples) -> (samples, channels)
-                                        arr = arr.T
-                                    # else: already (samples, channels)
-
-                                # Ensure stereo
-                                if arr.ndim == 2 and arr.shape[1] == 1:
-                                    arr = np.column_stack([arr, arr])
-
-                                # Ensure int16
-                                if arr.dtype != np.int16:
-                                    if arr.dtype in (np.float32, np.float64):
-                                        arr = (arr * 32767).astype(np.int16)
-                                    else:
-                                        arr = arr.astype(np.int16)
-
-                                # Append to buffer
-                                if arr.shape[1] == 2:  # Only append if correct shape
-                                    self.audio_buffer = np.vstack([self.audio_buffer, arr])
+                                # Transpose to (samples, channels) for our buffer format
+                                arr = arr.T
+                                self.audio_buffer = np.vstack([self.audio_buffer, arr])
 
         except av.error.EOFError:
             pass
