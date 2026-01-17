@@ -37,6 +37,13 @@ class Content(ABC):
         """
         return None
 
+    def is_complete(self) -> bool:
+        """
+        Returns True if this content has finished and should advance to the next.
+        By default, content never completes on its own (relies on duration).
+        """
+        return False
+
 class TitleCard(Content):
     def __init__(self, image_path: str, asset_manager: AssetManager):
         self.image_path = image_path
@@ -80,8 +87,13 @@ class DungeonWalk(Content):
 
     def render(self, width: int, height: int) -> Image:
         if self.hero and self.background is not None:
-             return render_frame_camera(self.background, self.assets, self.hero, width, height)
+            return render_frame_camera(self.background, self.assets, self.hero, width, height)
         return np.zeros((height, width, 3), np.uint8)
+
+    def is_complete(self) -> bool:
+        if self.hero and self.dungeon:
+            return self.dungeon.is_on_goal(self.hero.x, self.hero.y)
+        return False
 
 class VideoClip(Content):
     """
@@ -251,8 +263,8 @@ class VideoProgram:
 
         current_content.update(dt)
 
-        if self.time_in_current >= duration:
-            # Advance to next
+        # Advance if duration exceeded or content signals completion
+        if self.time_in_current >= duration or current_content.is_complete():
             self.current_index = (self.current_index + 1) % len(self.playlist)
             self.time_in_current = 0.0
             self.playlist[self.current_index][0].enter()

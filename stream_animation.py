@@ -54,13 +54,10 @@ def main():
     video_files = glob.glob(os.path.join('large_media', '*.mp4'))
     random.shuffle(video_files)
 
-    # Reuse the same walk during the video
-    walk = DungeonWalk(args.map_width, args.map_height, assets) 
-
     for video_path in video_files:
-       # video_program.add_content(TitleCard(title_path, assets), 15.0)
-       # video_program.add_content(VideoClip(video_path, 30), 20.0)
-        video_program.add_content(walk, 30.0)
+        video_program.add_content(TitleCard(title_path, assets), 15.0)
+        video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 60.0)
+        video_program.add_content(VideoClip(video_path, 30), 20.0)
      
     video_program.start()
 

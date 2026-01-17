@@ -48,6 +48,14 @@ class Dungeon:
                     return (col * TILE_SIZE + TILE_SIZE / 2, row * TILE_SIZE + TILE_SIZE / 2)
         return None
 
+    def is_on_goal(self, x: float, y: float) -> bool:
+        """Returns True if the given pixel position is on the goal tile."""
+        col = int(x / TILE_SIZE)
+        row = int(y / TILE_SIZE)
+        if 0 <= row < self.rows and 0 <= col < self.cols:
+            return self.map[row, col] == Tile.GOAL
+        return False
+
     def find_doors_in_room(self, room_row: int, room_col: int) -> List[Tuple[int, float, float]]:
         """
         Returns list of (direction, pixel_x, pixel_y) for doors in the given room.
