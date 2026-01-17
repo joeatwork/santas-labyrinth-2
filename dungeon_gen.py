@@ -24,6 +24,16 @@ class Tile:
     # Goal
     GOAL: int = 30
 
+    # Doorframes (foreground tiles)
+    NORTH_DOORFRAME_WEST: int = 40
+    NORTH_DOORFRAME_EAST: int = 41
+    SOUTH_DOORFRAME_WEST: int = 42
+    SOUTH_DOORFRAME_EAST: int = 43
+    WEST_DOORFRAME_NORTH: int = 44
+    WEST_DOORFRAME_SOUTH: int = 45
+    EAST_DOORFRAME_NORTH: int = 46
+    EAST_DOORFRAME_SOUTH: int = 47
+
 # Room size in tiles (from references)
 ROOM_WIDTH: int = 12
 ROOM_HEIGHT: int = 10
@@ -114,6 +124,49 @@ def get_room_template(n_door: bool, e_door: bool, s_door: bool, w_door: bool) ->
 
 # Type Definition
 DungeonMap = np.ndarray
+
+def generate_foreground_from_dungeon(dungeon_map: DungeonMap) -> DungeonMap:
+    """
+    Generates a foreground map from an existing dungeon map by detecting door tiles
+    and placing corresponding doorframe arch tiles above them.
+    """
+    rows, cols = dungeon_map.shape
+    foreground: DungeonMap = np.zeros((rows, cols), dtype=int)
+
+    for r in range(rows):
+        for c in range(cols):
+            tile = dungeon_map[r, c]
+
+            if tile == Tile.NORTH_DOOR:
+                # Check if this is the west or east half of the door
+                # by looking at the tile to the left
+                if c > 0 and dungeon_map[r, c - 1] == Tile.NORTH_DOOR:
+                    # This is the east half
+                    foreground[r, c] = Tile.NORTH_DOORFRAME_EAST
+                else:
+                    # This is the west half
+                    foreground[r, c] = Tile.NORTH_DOORFRAME_WEST
+
+            elif tile == Tile.SOUTH_DOOR:
+                if c > 0 and dungeon_map[r, c - 1] == Tile.SOUTH_DOOR:
+                    foreground[r, c] = Tile.SOUTH_DOORFRAME_EAST
+                else:
+                    foreground[r, c] = Tile.SOUTH_DOORFRAME_WEST
+
+            elif tile == Tile.WEST_DOOR:
+                if r > 0 and dungeon_map[r - 1, c] == Tile.WEST_DOOR:
+                    foreground[r, c] = Tile.WEST_DOORFRAME_SOUTH
+                else:
+                    foreground[r, c] = Tile.WEST_DOORFRAME_NORTH
+
+            elif tile == Tile.EAST_DOOR:
+                if r > 0 and dungeon_map[r - 1, c] == Tile.EAST_DOOR:
+                    foreground[r, c] = Tile.EAST_DOORFRAME_SOUTH
+                else:
+                    foreground[r, c] = Tile.EAST_DOORFRAME_NORTH
+
+    return foreground
+
 
 def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[DungeonMap, Tuple[int, int]]:
     """

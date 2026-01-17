@@ -6,7 +6,7 @@ import random
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Optional, Any
 
-from animation import AssetManager, Image, create_dungeon_background, render_frame_camera
+from animation import AssetManager, Image, create_dungeon_background, create_dungeon_foreground, render_frame_camera
 from world import Dungeon, Hero
 
 class Content(ABC):
@@ -74,12 +74,14 @@ class DungeonWalk(Content):
         self.dungeon: Optional[Dungeon] = None
         self.hero: Optional[Hero] = None
         self.background: Optional[Image] = None
+        self.foreground: Optional[Image] = None
 
     def enter(self) -> None:
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
         self.dungeon = Dungeon(self.map_width, self.map_height)
         self.hero = Hero(self.dungeon.start_pos[0], self.dungeon.start_pos[1])
         self.background = create_dungeon_background(self.dungeon.map, self.assets)
+        self.foreground = create_dungeon_foreground(self.dungeon.map, self.assets)
 
     def update(self, dt: float) -> None:
         if self.hero and self.dungeon:
@@ -87,7 +89,7 @@ class DungeonWalk(Content):
 
     def render(self, width: int, height: int) -> Image:
         if self.hero and self.background is not None:
-            return render_frame_camera(self.background, self.assets, self.hero, width, height)
+            return render_frame_camera(self.background, self.assets, self.hero, width, height, self.foreground)
         return np.zeros((height, width, 3), np.uint8)
 
     def is_complete(self) -> bool:

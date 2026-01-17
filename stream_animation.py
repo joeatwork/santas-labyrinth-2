@@ -1,6 +1,5 @@
 import argparse
 import sys
-import time
 import os
 import random
 import glob
@@ -56,7 +55,7 @@ def main():
 
     for video_path in video_files:
         video_program.add_content(TitleCard(title_path, assets), 15.0)
-        video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 60.0)
+        video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 120.0)
         video_program.add_content(VideoClip(video_path, 30), 20.0)
      
     video_program.start()
@@ -77,16 +76,11 @@ def main():
     # Audio samples needed per video frame
     samples_per_frame = audio_sample_rate // args.fps
 
-    start_time = time.time()
-    last_frame_time = start_time
     frame_count = 0
+    dt = 1.0 / args.fps  # Fixed timestep for consistent simulation
 
     try:
         while True:
-            current_time = time.time()
-            dt = current_time - last_frame_time
-            last_frame_time = current_time
-
             # Update Stream
             video_program.update(dt)
 
@@ -110,11 +104,6 @@ def main():
             # Progress indicator every second
             if frame_count % args.fps == 0:
                 log(f"Frame {frame_count} ({frame_count // args.fps}s)")
-
-            # Maintain FPS
-            elapsed = time.time() - current_time
-            sleep_time = max(0, (1.0/args.fps) - elapsed)
-            time.sleep(sleep_time)
             
     except KeyboardInterrupt:
         pass

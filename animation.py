@@ -2,7 +2,7 @@ import cv2
 import os
 import sys
 import numpy as np
-from dungeon_gen import Tile, DungeonMap
+from dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
 from world import Hero
 from typing import Dict, Any, Optional, Tuple
 
@@ -31,6 +31,20 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     # Goal
     'goal': {'x': 0, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/red_heart.png'},
     
+    # Doorframes (foreground arches - death_mountain)
+    # North doorframes (drawn over north doors)
+    'doorframe_north_west': {'x': 256, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'doorframe_north_east': {'x': 320, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    # South doorframes (drawn over south doors)
+    'doorframe_south_west': {'x': 0, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'doorframe_south_east': {'x': 64, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    # West doorframes (drawn over west doors)
+    'doorframe_west_north': {'x': 640, 'y': 256, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'doorframe_west_south': {'x': 640, 'y': 320, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    # East doorframes (drawn over east doors)
+    'doorframe_east_north': {'x': 640, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'doorframe_east_south': {'x': 640, 'y': 64, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+
     # Hero Walk Cycles (spaceman)
     # South
     'hero_south_0': {'x': 192, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
@@ -71,6 +85,19 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.SOUTH_DOOR: 'floor',
     Tile.EAST_DOOR: 'floor',
     Tile.WEST_DOOR: 'floor',
+    Tile.NOTHING: None
+}
+
+# Foreground tile mapping (for doorframe arches drawn over hero)
+FOREGROUND_TILE_MAP: Dict[int, Optional[str]] = {
+    Tile.NORTH_DOORFRAME_WEST: 'doorframe_north_west',
+    Tile.NORTH_DOORFRAME_EAST: 'doorframe_north_east',
+    Tile.SOUTH_DOORFRAME_WEST: 'doorframe_south_west',
+    Tile.SOUTH_DOORFRAME_EAST: 'doorframe_south_east',
+    Tile.WEST_DOORFRAME_NORTH: 'doorframe_west_north',
+    Tile.WEST_DOORFRAME_SOUTH: 'doorframe_west_south',
+    Tile.EAST_DOORFRAME_NORTH: 'doorframe_east_north',
+    Tile.EAST_DOORFRAME_SOUTH: 'doorframe_east_south',
     Tile.NOTHING: None
 }
 
@@ -133,10 +160,18 @@ def overlay_image(background: Image, foreground: Image, x: int, y: int) -> None:
     
     if fg_crop.shape[2] == 4:
         alpha = fg_crop[:, :, 3] / 255.0
-        alpha = np.dstack([alpha, alpha, alpha])
         fg_bgr = fg_crop[:, :, :3]
-        bg_combined = (1.0 - alpha) * bg_crop + alpha * fg_bgr
-        background[y1:y2, x1:x2] = bg_combined.astype(np.uint8)
+        bg_channels = bg_crop.shape[2] if len(bg_crop.shape) > 2 else 3
+        # Handle both RGB and RGBA backgrounds
+        bg_rgb = bg_crop[:, :, :3] if bg_channels >= 3 else bg_crop
+        alpha_3ch = np.dstack([alpha, alpha, alpha])
+        blended = (1.0 - alpha_3ch) * bg_rgb + alpha_3ch * fg_bgr
+        background[y1:y2, x1:x2, :3] = blended.astype(np.uint8)
+        # If background has alpha channel, update it too
+        if bg_channels == 4:
+            bg_alpha = bg_crop[:, :, 3] / 255.0
+            new_alpha = alpha + bg_alpha * (1.0 - alpha)
+            background[y1:y2, x1:x2, 3] = (new_alpha * 255).astype(np.uint8)
     else:
         background[y1:y2, x1:x2] = fg_crop
 
@@ -177,7 +212,33 @@ def create_dungeon_background(dungeon_map: DungeonMap, assets: AssetManager) -> 
                     
     return bg
 
-def render_frame_camera(bg_image: Image, assets: AssetManager, hero: Hero, view_width: int, view_height: int) -> Image:
+def create_dungeon_foreground(dungeon_map: DungeonMap, assets: AssetManager) -> Image:
+    """
+    Creates the foreground image for the dungeon (doorframe arches).
+    This layer is drawn on top of the hero.
+    Uses RGBA to support transparency.
+    """
+    foreground_map = generate_foreground_from_dungeon(dungeon_map)
+    rows, cols = foreground_map.shape
+    width = cols * TILE_SIZE
+    height = rows * TILE_SIZE
+
+    # Create transparent background (RGBA)
+    fg: Image = np.zeros((height, width, 4), np.uint8)
+
+    for r in range(rows):
+        for c in range(cols):
+            tile_type = foreground_map[r, c]
+            sprite_name = FOREGROUND_TILE_MAP.get(tile_type)
+
+            if sprite_name:
+                sprite = assets.get_sprite(sprite_name)
+                overlay_image(fg, sprite, c * TILE_SIZE, r * TILE_SIZE)
+
+    return fg
+
+
+def render_frame_camera(bg_image: Image, assets: AssetManager, hero: Hero, view_width: int, view_height: int, fg_image: Optional[Image] = None) -> Image:
     """
     Renders the frame centered on the hero.
     """
@@ -218,5 +279,12 @@ def render_frame_camera(bg_image: Image, assets: AssetManager, hero: Hero, view_
         overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
     except KeyError:
         pass # Should not happen with correct data
+
+    # Draw foreground layer (doorframe arches) on top of hero
+    if fg_image is not None:
+        fg_h, fg_w = fg_image.shape[:2]
+        if fg_w >= view_width and fg_h >= view_height:
+            fg_crop = fg_image[cam_y:cam_y+view_height, cam_x:cam_x+view_width]
+            overlay_image(frame, fg_crop, 0, 0)
 
     return frame
