@@ -81,10 +81,14 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.SE_CORNER: 'wall_se_corner',
     Tile.GOAL: 'goal',
     # Door tiles render as floor
-    Tile.NORTH_DOOR: 'floor',
-    Tile.SOUTH_DOOR: 'floor',
-    Tile.EAST_DOOR: 'floor',
-    Tile.WEST_DOOR: 'floor',
+    Tile.NORTH_DOOR_WEST: 'floor',
+    Tile.NORTH_DOOR_EAST: 'floor',
+    Tile.SOUTH_DOOR_WEST: 'floor',
+    Tile.SOUTH_DOOR_EAST: 'floor',
+    Tile.WEST_DOOR_NORTH: 'floor',
+    Tile.WEST_DOOR_SOUTH: 'floor',
+    Tile.EAST_DOOR_NORTH: 'floor',
+    Tile.EAST_DOOR_SOUTH: 'floor',
     Tile.NOTHING: None
 }
 

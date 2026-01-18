@@ -41,17 +41,17 @@ class MockDungeon:
         base_col = room_col * ROOM_WIDTH
 
         if direction == 3:  # North - place at row 0, cols 5-6
-            self.map[base_row, base_col + 5] = Tile.NORTH_DOOR
-            self.map[base_row, base_col + 6] = Tile.NORTH_DOOR
+            self.map[base_row, base_col + 5] = Tile.NORTH_DOOR_WEST
+            self.map[base_row, base_col + 6] = Tile.NORTH_DOOR_EAST
         elif direction == 1:  # South - place at row 9, cols 5-6
-            self.map[base_row + 9, base_col + 5] = Tile.SOUTH_DOOR
-            self.map[base_row + 9, base_col + 6] = Tile.SOUTH_DOOR
+            self.map[base_row + 9, base_col + 5] = Tile.SOUTH_DOOR_WEST
+            self.map[base_row + 9, base_col + 6] = Tile.SOUTH_DOOR_EAST
         elif direction == 2:  # West - place at col 0, rows 4-5
-            self.map[base_row + 4, base_col] = Tile.WEST_DOOR
-            self.map[base_row + 5, base_col] = Tile.WEST_DOOR
+            self.map[base_row + 4, base_col] = Tile.WEST_DOOR_NORTH
+            self.map[base_row + 5, base_col] = Tile.WEST_DOOR_SOUTH
         elif direction == 0:  # East - place at col 11, rows 4-5
-            self.map[base_row + 4, base_col + 11] = Tile.EAST_DOOR
-            self.map[base_row + 5, base_col + 11] = Tile.EAST_DOOR
+            self.map[base_row + 4, base_col + 11] = Tile.EAST_DOOR_NORTH
+            self.map[base_row + 5, base_col + 11] = Tile.EAST_DOOR_SOUTH
         else:
             raise ValueError(f"Invalid direction: {direction}")
 
@@ -63,10 +63,14 @@ class MockDungeon:
             return tile in (
                 Tile.FLOOR,
                 Tile.GOAL,
-                Tile.NORTH_DOOR,
-                Tile.SOUTH_DOOR,
-                Tile.EAST_DOOR,
-                Tile.WEST_DOOR,
+                Tile.NORTH_DOOR_WEST,
+                Tile.NORTH_DOOR_EAST,
+                Tile.SOUTH_DOOR_WEST,
+                Tile.SOUTH_DOOR_EAST,
+                Tile.WEST_DOOR_NORTH,
+                Tile.WEST_DOOR_SOUTH,
+                Tile.EAST_DOOR_NORTH,
+                Tile.EAST_DOOR_SOUTH,
             )
         return False
 
@@ -87,10 +91,10 @@ class MockDungeon:
         base_col = room_col * ROOM_WIDTH
 
         door_tile_to_direction = {
-            Tile.NORTH_DOOR: 3,
-            Tile.SOUTH_DOOR: 1,
-            Tile.EAST_DOOR: 0,
-            Tile.WEST_DOOR: 2,
+            Tile.NORTH_DOOR_WEST: 3,
+            Tile.SOUTH_DOOR_WEST: 1,
+            Tile.EAST_DOOR_NORTH: 0,
+            Tile.WEST_DOOR_NORTH: 2,
         }
 
         for local_row in range(ROOM_HEIGHT):

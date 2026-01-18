@@ -1,7 +1,7 @@
 import math
 import numpy as np
-from dungeon_gen import generate_dungeon, Tile, DungeonMap, ROOM_WIDTH, ROOM_HEIGHT
-from typing import Tuple, List, Optional, Callable
+from dungeon_gen import generate_dungeon, Tile, DungeonMap, RoomTemplate
+from typing import Tuple, List, Optional, Callable, Dict
 
 TILE_SIZE: int = 64
 
@@ -9,12 +9,17 @@ class Dungeon:
     def __init__(self, width_rooms: int, height_rooms: int) -> None:
         self.map: DungeonMap
         self.start_pos: Tuple[int, int]
-        self.map, self.start_pos = generate_dungeon(width_rooms, height_rooms)
-        
+
+        # Room layout information
+        self.room_positions: Dict[Tuple[int, int], Tuple[int, int]]
+        self.room_templates: Dict[Tuple[int, int], RoomTemplate]
+
+        self.map, self.start_pos, self.room_positions, self.room_templates = generate_dungeon(width_rooms, height_rooms)
+
         self.rows: int
         self.cols: int
         self.rows, self.cols = self.map.shape
-        
+
         self.width_pixels: int = self.cols * TILE_SIZE
         self.height_pixels: int = self.rows * TILE_SIZE
 
@@ -27,10 +32,14 @@ class Dungeon:
             return tile in (
                 Tile.FLOOR,
                 Tile.GOAL,
-                Tile.NORTH_DOOR,
-                Tile.SOUTH_DOOR,
-                Tile.EAST_DOOR,
-                Tile.WEST_DOOR,
+                Tile.NORTH_DOOR_WEST,
+                Tile.NORTH_DOOR_EAST,
+                Tile.SOUTH_DOOR_WEST,
+                Tile.SOUTH_DOOR_EAST,
+                Tile.WEST_DOOR_NORTH,
+                Tile.WEST_DOOR_SOUTH,
+                Tile.EAST_DOOR_NORTH,
+                Tile.EAST_DOOR_SOUTH,
             )
         return False
 
@@ -38,7 +47,16 @@ class Dungeon:
         """Returns (room_row, room_col) for a given pixel position."""
         tile_col = int(x / TILE_SIZE)
         tile_row = int(y / TILE_SIZE)
-        return (tile_row // ROOM_HEIGHT, tile_col // ROOM_WIDTH)
+
+        # Search through rooms to find which one contains this tile
+        for (r, c), (pos_x, pos_y) in self.room_positions.items():
+            template = self.room_templates[(r, c)]
+            if (pos_x <= tile_col < pos_x + template.width and
+                pos_y <= tile_row < pos_y + template.height):
+                return (r, c)
+        # Not in a room (probably in a corridor) - find nearest room
+        # For now, return based on approximate position
+        return (0, 0)
 
     def find_goal_position(self) -> Optional[Tuple[float, float]]:
         """Returns pixel position (x, y) of the goal tile, or None if not found."""
@@ -66,30 +84,40 @@ class Dungeon:
         doors: List[Tuple[int, float, float]] = []
         found_doors: set[int] = set()  # Track which directions we've found
 
-        base_row = room_row * ROOM_HEIGHT
-        base_col = room_col * ROOM_WIDTH
+        # Determine room bounds
+        if (room_row, room_col) not in self.room_positions:
+            return doors
+        pos_x, pos_y = self.room_positions[(room_row, room_col)]
+        template = self.room_templates[(room_row, room_col)]
+        base_col = pos_x
+        base_row = pos_y
+        room_width = template.width
+        room_height = template.height
 
-        # Map door tile types to directions
+        # Map door tile types to directions (use first tile of each door pair)
         door_tile_to_direction = {
-            Tile.NORTH_DOOR: 3,
-            Tile.SOUTH_DOOR: 1,
-            Tile.EAST_DOOR: 0,
-            Tile.WEST_DOOR: 2,
+            Tile.NORTH_DOOR_WEST: 3,
+            Tile.SOUTH_DOOR_WEST: 1,
+            Tile.EAST_DOOR_NORTH: 0,
+            Tile.WEST_DOOR_NORTH: 2,
         }
 
         # Scan all tiles in the room for door tiles
-        for local_row in range(ROOM_HEIGHT):
-            for local_col in range(ROOM_WIDTH):
-                tile = self.map[base_row + local_row, base_col + local_col]
-                if tile in door_tile_to_direction:
-                    direction = door_tile_to_direction[tile]
-                    # Only add each door direction once (doors span multiple tiles)
-                    if direction not in found_doors:
-                        found_doors.add(direction)
-                        # Calculate door center position
-                        door_x = (base_col + local_col + 0.5) * TILE_SIZE
-                        door_y = (base_row + local_row + 0.5) * TILE_SIZE
-                        doors.append((direction, door_x, door_y))
+        for local_row in range(room_height):
+            for local_col in range(room_width):
+                map_row = base_row + local_row
+                map_col = base_col + local_col
+                if 0 <= map_row < self.rows and 0 <= map_col < self.cols:
+                    tile = self.map[map_row, map_col]
+                    if tile in door_tile_to_direction:
+                        direction = door_tile_to_direction[tile]
+                        # Only add each door direction once (doors span multiple tiles)
+                        if direction not in found_doors:
+                            found_doors.add(direction)
+                            # Calculate door center position
+                            door_x = (map_col + 0.5) * TILE_SIZE
+                            door_y = (map_row + 0.5) * TILE_SIZE
+                            doors.append((direction, door_x, door_y))
 
         return doors
 
@@ -130,7 +158,13 @@ class Hero:
 
         # Check if hero is standing in a door - keep moving through it
         current_tile = dungeon.map[hero_row, hero_col]
-        if current_tile in (Tile.NORTH_DOOR, Tile.SOUTH_DOOR, Tile.EAST_DOOR, Tile.WEST_DOOR):
+        door_tiles = (
+            Tile.NORTH_DOOR_WEST, Tile.NORTH_DOOR_EAST,
+            Tile.SOUTH_DOOR_WEST, Tile.SOUTH_DOOR_EAST,
+            Tile.WEST_DOOR_NORTH, Tile.WEST_DOOR_SOUTH,
+            Tile.EAST_DOOR_NORTH, Tile.EAST_DOOR_SOUTH,
+        )
+        if current_tile in door_tiles:
             # Continue in current direction until through the door
             target_col = hero_col
             target_row = hero_row
