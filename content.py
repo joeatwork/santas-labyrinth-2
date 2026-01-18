@@ -103,18 +103,23 @@ class VideoClip(Content):
     Uses PyAV for decoding to get synchronized audio.
     """
 
-    def __init__(self, video_path: str, max_length_seconds: int):
+    def __init__(self, video_path: str, max_length_seconds: int, output_fps: float = 30.0):
         self.video_path = video_path
         self.container: Optional[av.container.InputContainer] = None
         self.video_stream: Optional[av.stream.Stream] = None
         self.audio_stream: Optional[av.stream.Stream] = None
-        self.fps: float = 30.0
+        self.source_fps: float = 30.0  # Will be read from file
+        self.output_fps: float = output_fps
         self.audio_sample_rate: int = 44100
         self.max_length_seconds = max_length_seconds
 
         # Decoded frame/audio buffers
         self.current_frame: Optional[np.ndarray] = None
         self.audio_buffer: np.ndarray = np.zeros((0, 2), dtype=np.int16)
+
+        # Frame rate conversion: track source time to decide when to decode new frames
+        self.source_time: float = 0.0  # Accumulated time in source video
+        self.last_decoded_frame: Optional[np.ndarray] = None
 
         # Audio resampler for consistent output format
         self.audio_resampler: Optional[av.audio.resampler.AudioResampler] = None
@@ -129,12 +134,12 @@ class VideoClip(Content):
             print(f"Error: Could not open video {self.video_path}: {e}", file=sys.stderr)
             return
 
-        # Get video stream
+        # Get video stream and read source fps
         video_streams = [s for s in self.container.streams if s.type == 'video']
         if video_streams:
             self.video_stream = video_streams[0]
-            self.fps = float(self.video_stream.average_rate) if self.video_stream.average_rate else 30.0
-
+            self.source_fps = float(self.video_stream.average_rate) if self.video_stream.average_rate else 30.0
+            print(f"Video stream: {self.source_fps:.3f} fps source -> {self.output_fps:.3f} fps output", file=sys.stderr)
         else:
             print(f"Warning: No video stream in {self.video_path}", file=sys.stderr)
             self.video_stream = None
@@ -169,12 +174,15 @@ class VideoClip(Content):
             else:
                 print(f"Playing video {self.video_path} from start...", file=sys.stderr)
 
-        # Clear buffers
+        # Clear buffers and reset timing state
         self.current_frame = None
+        self.last_decoded_frame = None
         self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
+        self.source_time = 0.0
 
         # Pre-decode first frame
         self._decode_next()
+        self.last_decoded_frame = self.current_frame
 
     def _decode_next(self) -> None:
         """Decode the next video frame and associated audio."""
@@ -211,13 +219,34 @@ class VideoClip(Content):
         pass
 
     def render(self, width: int, height: int) -> Image:
-        # Decode next frame
-        self._decode_next()
+        # Advance source time by how much real time one output frame represents
+        output_frame_duration = 1.0 / self.output_fps
+        self.source_time += output_frame_duration
 
-        if self.current_frame is None:
+        # Calculate how much source video time we should have consumed
+        source_frame_duration = 1.0 / self.source_fps
+
+        # Decode frames until we catch up to where source_time says we should be
+        # This handles both dropping frames (source faster than output) and
+        # duplicating frames (source slower than output - we just don't decode)
+        frames_to_decode = int(self.source_time / source_frame_duration)
+        frames_decoded = 0
+
+        while frames_decoded < frames_to_decode:
+            self._decode_next()
+            if self.current_frame is not None:
+                self.last_decoded_frame = self.current_frame
+            frames_decoded += 1
+
+        # Subtract the time we've consumed
+        self.source_time -= frames_to_decode * source_frame_duration
+
+        # Return the last decoded frame (may be duplicated if source is slower)
+        frame_to_show = self.last_decoded_frame
+        if frame_to_show is None:
             return np.zeros((height, width, 3), np.uint8)
 
-        return cv2.resize(self.current_frame, (width, height))
+        return cv2.resize(frame_to_show, (width, height))
 
     def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
         """Return audio samples for this frame."""

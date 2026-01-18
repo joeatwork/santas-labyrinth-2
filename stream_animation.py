@@ -44,8 +44,11 @@ def main():
     except Exception as e:
         log(f"Error loading assets: {e}")
         return
-
-    title_path = os.path.join('assets', 'stills', 'title_cart_taste_the_quality.png')
+ 
+    title_cards = [
+        os.path.join('assets', 'stills', 'title_card_youre_soaking_in_it.png'),
+        os.path.join('assets', 'stills', 'title_card_taste_the_quality.png'),
+    ]
 
     # Initialize Stream Loop
     video_program = VideoProgram()
@@ -54,9 +57,11 @@ def main():
     random.shuffle(video_files)
 
     for video_path in video_files:
+        title_path = title_cards.pop(0)
+        title_cards.append(title_path)  # Rotate title cards
         video_program.add_content(TitleCard(title_path, assets), 15.0)
         video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 120.0)
-        video_program.add_content(VideoClip(video_path, 30), 20.0)
+        video_program.add_content(VideoClip(video_path, 30, output_fps=args.fps), 20.0)
      
     video_program.start()
 
