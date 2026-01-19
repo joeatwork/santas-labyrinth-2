@@ -3,6 +3,7 @@ Pathfinding algorithms for dungeon navigation.
 """
 
 from collections import deque
+import random
 from typing import Callable, List, Tuple, Optional, Dict
 
 # A path is a list of tile coordinates (row, col), ordered from start to goal
@@ -53,6 +54,9 @@ def find_path_bfs(
     while queue and tiles_searched < max_distance:
         current_row, current_col = queue.popleft()
         tiles_searched += 1
+
+        # Shuffle directions to avoid bias
+        random.shuffle(directions)
 
         for dr, dc in directions:
             next_row = current_row + dr
