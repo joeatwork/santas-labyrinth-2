@@ -19,10 +19,19 @@ class MockDungeon:
         self.map = np.zeros((self.rows, self.cols), dtype=int)
         self._goal_position: Optional[Tuple[float, float]] = None
 
+        # Track which tiles belong to which room (for corridor support)
+        # Maps (tile_row, tile_col) -> (room_row, room_col)
+        # If not in map, assumed to be corridor/nothing
+        self._tile_to_room: Dict[Tuple[int, int], Tuple[int, int]] = {}
+
         # Fill all rooms with floor by default
         for r in range(self.rows):
             for c in range(self.cols):
                 self.map[r, c] = Tile.FLOOR
+                # Map each tile to its room
+                room_row = r // ROOM_HEIGHT
+                room_col = c // ROOM_WIDTH
+                self._tile_to_room[(r, c)] = (room_row, room_col)
 
     def set_goal(self, tile_row: int, tile_col: int) -> None:
         """Place goal at specific tile coordinates."""
@@ -31,6 +40,11 @@ class MockDungeon:
             tile_col * TILE_SIZE + TILE_SIZE / 2,
             tile_row * TILE_SIZE + TILE_SIZE / 2
         )
+
+    def mark_corridor_tile(self, tile_row: int, tile_col: int, adjacent_room: Tuple[int, int]) -> None:
+        """Mark a tile as part of a corridor (not belonging to any room)."""
+        # Corridor tiles are mapped to an adjacent room for pathfinding purposes
+        self._tile_to_room[(tile_row, tile_col)] = adjacent_room
 
     def add_door(self, room_row: int, room_col: int, direction: int) -> None:
         """
@@ -77,6 +91,10 @@ class MockDungeon:
     def get_room_coords(self, x: float, y: float) -> Tuple[int, int]:
         tile_col = int(x / TILE_SIZE)
         tile_row = int(y / TILE_SIZE)
+        # Check if this tile is explicitly mapped to a room
+        if (tile_row, tile_col) in self._tile_to_room:
+            return self._tile_to_room[(tile_row, tile_col)]
+        # Default fallback for unmapped tiles (corridors)
         return (tile_row // ROOM_HEIGHT, tile_col // ROOM_WIDTH)
 
     def find_goal_position(self) -> Optional[Tuple[float, float]]:
@@ -87,9 +105,6 @@ class MockDungeon:
         doors: List[Tuple[int, float, float]] = []
         found_doors: set[int] = set()
 
-        base_row = room_row * ROOM_HEIGHT
-        base_col = room_col * ROOM_WIDTH
-
         door_tile_to_direction = {
             Tile.NORTH_DOOR_WEST: 3,
             Tile.SOUTH_DOOR_WEST: 1,
@@ -97,15 +112,18 @@ class MockDungeon:
             Tile.WEST_DOOR_NORTH: 2,
         }
 
-        for local_row in range(ROOM_HEIGHT):
-            for local_col in range(ROOM_WIDTH):
-                tile = self.map[base_row + local_row, base_col + local_col]
+        # Find all tiles that belong to this room
+        room_tiles = [(r, c) for (r, c), room in self._tile_to_room.items() if room == (room_row, room_col)]
+
+        for tile_row, tile_col in room_tiles:
+            if 0 <= tile_row < self.rows and 0 <= tile_col < self.cols:
+                tile = self.map[tile_row, tile_col]
                 if tile in door_tile_to_direction:
                     direction = door_tile_to_direction[tile]
                     if direction not in found_doors:
                         found_doors.add(direction)
-                        door_x = (base_col + local_col + 0.5) * TILE_SIZE
-                        door_y = (base_row + local_row + 0.5) * TILE_SIZE
+                        door_x = (tile_col + 0.5) * TILE_SIZE
+                        door_y = (tile_row + 0.5) * TILE_SIZE
                         doors.append((direction, door_x, door_y))
 
         return doors
@@ -493,3 +511,122 @@ class TestHeroLeavesRoom:
         assert hero.direction == 0  # Still facing East
         # Target should be one tile east (into the next room)
         assert hero.target_x > start_x
+
+
+class TestHeroCorridorNavigation:
+    """Test that hero navigates through corridors without turning around."""
+
+    def test_hero_exits_north_south_corridor_to_south(self):
+        """
+        Test that a hero entering a north-south corridor from the north
+        will always exit to the south without turning around.
+        """
+        # Create a dungeon with two rooms and a corridor between them
+        # Room 0: rows 0-9
+        # Corridor: rows 10-17 (8 tiles)
+        # Room 1: rows 18-27
+
+        # Calculate dimensions
+        corridor_length = 8
+        total_rows = 2 * ROOM_HEIGHT + corridor_length
+        dungeon = MockDungeon(1, 1)
+
+        # Manually resize the map to accommodate two rooms + corridor
+        dungeon.rows = total_rows
+        dungeon.map = np.zeros((total_rows, ROOM_WIDTH), dtype=int)
+
+        # Fill rooms with floor and mark tiles
+        for row in range(ROOM_HEIGHT):
+            for col in range(ROOM_WIDTH):
+                dungeon.map[row, col] = Tile.FLOOR  # Room 0
+                dungeon._tile_to_room[(row, col)] = (0, 0)
+        for row in range(ROOM_HEIGHT + corridor_length, total_rows):
+            for col in range(ROOM_WIDTH):
+                dungeon.map[row, col] = Tile.FLOOR  # Room 1
+                dungeon._tile_to_room[(row, col)] = (1, 0)
+
+        # Set goal in the southern room
+        goal_row = ROOM_HEIGHT + corridor_length + 5
+        goal_col = 5
+        dungeon.set_goal(goal_row, goal_col)
+
+        # Add south door to room 0 (at row 9, cols 5-6)
+        dungeon.map[ROOM_HEIGHT - 1, 5] = Tile.SOUTH_DOOR_WEST
+        dungeon.map[ROOM_HEIGHT - 1, 6] = Tile.SOUTH_DOOR_EAST
+
+        # Create corridor tiles (rows 10-17)
+        corridor_start_row = ROOM_HEIGHT
+        corridor_end_row = ROOM_HEIGHT + corridor_length - 1
+        corridor_col = 5  # Align with door positions
+
+        # Fill corridor with floor and walls
+        # Mark corridor tiles as a special "corridor room" (0, 1) - not a real room
+        # This prevents the hero from thinking it's in either end room
+        for row in range(corridor_start_row, corridor_end_row + 1):
+            dungeon.map[row, corridor_col - 1] = Tile.WEST_WALL
+            dungeon.map[row, corridor_col] = Tile.FLOOR
+            dungeon.map[row, corridor_col + 1] = Tile.FLOOR
+            dungeon.map[row, corridor_col + 2] = Tile.EAST_WALL
+            # Mark corridor tiles as a different "room" to isolate navigation
+            for col in [corridor_col - 1, corridor_col, corridor_col + 1, corridor_col + 2]:
+                dungeon._tile_to_room[(row, col)] = (0, 1)  # Corridor "room"
+
+        # Add door tiles at the corridor entrance (north door of corridor)
+        dungeon.map[corridor_start_row, corridor_col] = Tile.NORTH_DOOR_WEST
+        dungeon.map[corridor_start_row, corridor_col + 1] = Tile.NORTH_DOOR_EAST
+
+        # Add door tiles at the corridor exit (south door of corridor)
+        dungeon.map[corridor_end_row, corridor_col] = Tile.SOUTH_DOOR_WEST
+        dungeon.map[corridor_end_row, corridor_col + 1] = Tile.SOUTH_DOOR_EAST
+
+        # Add north door to room 1 (at row 18, cols 5-6)
+        room1_start_row = ROOM_HEIGHT + corridor_length
+        dungeon.map[room1_start_row, 5] = Tile.NORTH_DOOR_WEST
+        dungeon.map[room1_start_row, 6] = Tile.NORTH_DOOR_EAST
+
+        # Start hero in the middle of the corridor, having just entered from the north
+        corridor_middle_row = (corridor_start_row + corridor_end_row) // 2
+        start_x, start_y = tile_center(corridor_middle_row, corridor_col)
+        hero = Hero(start_x, start_y, random_choice=lambda lst: lst[0])
+        hero.direction = 1  # Facing South (came from north)
+
+        # Simulate that the hero just entered the corridor from room 0
+        # This sets up the entry_door_direction to prevent backtracking
+        hero.current_room = (0, 1)  # Corridor "room"
+        hero.entry_door_direction = 3  # Entered from north, so north door is the entry
+
+        # Track hero's direction through the corridor
+        directions_taken = []
+        positions = []
+        max_iterations = 200
+
+        for i in range(max_iterations):
+            if hero.state == 'idle':
+                hero.decide_next_move(dungeon)
+
+            if hero.state == 'walking':
+                directions_taken.append(hero.direction)
+                positions.append((int(hero.y / TILE_SIZE), hero.entry_door_direction, hero.current_room))
+
+            hero.move(0.1)
+
+            # Check if hero has exited the corridor to the south (reached room 1)
+            hero_row = int(hero.y / TILE_SIZE)
+            if hero_row >= room1_start_row + 2:  # Deep into room 1
+                break
+
+        # Debug output if test fails
+        if 3 in directions_taken:
+            print(f"\nHero turned north at iteration {directions_taken.index(3)}")
+            print(f"Positions when north was chosen: {positions[directions_taken.index(3)]}")
+            print(f"Direction history around that point: {directions_taken[max(0, directions_taken.index(3)-5):directions_taken.index(3)+5]}")
+            print(f"Hero start position: row={corridor_middle_row}, col={corridor_col}")
+            print(f"Doors found in room (0, 0): {dungeon.find_doors_in_room(0, 0)}")
+            print(f"Goal position: {dungeon.find_goal_position()}")
+
+        # Verify hero never turned north (direction 3)
+        assert 3 not in directions_taken, "Hero should never turn north in a north-south corridor"
+
+        # Verify hero reached the southern room
+        final_hero_row = int(hero.y / TILE_SIZE)
+        assert final_hero_row >= room1_start_row, f"Hero should have reached the southern room (row {final_hero_row} >= {room1_start_row})"

@@ -1,3 +1,21 @@
+"""
+Dungeon Generation Algorithm
+============================
+
+We grow the dungeon organically by connecting rooms through their doors.
+
+1. Start with a single room at position (0, 0) - the start room
+   - Place it with all possible doors enabled
+2. Keep a queue of "open doors" (doors that don't have corridors/rooms attached yet)
+3. While we haven't reached our target number of rooms:
+   a. Pick an open door from the queue
+   b. Pick a random room template that has a corresponding door (north to south, east to west)
+   c. Try to place the random room so that the doors line up
+   d. If it would overlap, mark this door as "blocked" and try another open door
+4. Place the goal in the last room added
+5. Replace all unconnected doors with walls (no "blind doors" that lead nowhere)
+"""
+
 import random
 import numpy as np
 from dataclasses import dataclass
@@ -6,7 +24,11 @@ from typing import Tuple, List, Dict, Set, Optional
 # TODO: eliminate optional arguments from functions where possible, prefer explicit parameters.
 # Do this throughout the codebase.
 
+
 # Tile Constants (Matching animation.py expectations or defining new ones)
+# TODO: Tile mixes logical, map tiles (like NORTH_DOOR_WEST) with rendeing
+# implementation details like NORTH_DOORFRAME_WEST. These should be distinct
+# types (and dungeon generation shouldn't know that foregrounds and backgrounds exist.)
 class Tile:
     NOTHING: int = 0
     FLOOR: int = 1
@@ -18,7 +40,7 @@ class Tile:
     NE_CORNER: int = 15
     SW_CORNER: int = 16
     SE_CORNER: int = 17
-    
+
     # Doors (each direction has two tiles - west/east or north/south halves)
     NORTH_DOOR_WEST: int = 20
     NORTH_DOOR_EAST: int = 21
@@ -42,34 +64,55 @@ class Tile:
     EAST_DOORFRAME_NORTH: int = 46
     EAST_DOORFRAME_SOUTH: int = 47
 
+
 # Room size in tiles (from references)
 ROOM_WIDTH: int = 12
 ROOM_HEIGHT: int = 10
 
 # Corridor gap between rooms (for variable-size rooms)
-CORRIDOR_GAP: int = 4
+# Minimum is 8 to allow for L-shaped corridors with proper walls:
+# - 4 tiles for the turning section (wall + 2 floor + wall)
+# - 4 tiles minimum for connecting segments
+CORRIDOR_GAP: int = 8
 
 # ASCII character to tile mapping
 ASCII_TO_TILE: Dict[str, int] = {
-    ' ': Tile.NOTHING,
-    '.': Tile.FLOOR,
-    '-': Tile.NORTH_WALL,
-    '_': Tile.SOUTH_WALL,
-    '[': Tile.WEST_WALL,
-    ']': Tile.EAST_WALL,
-    '1': Tile.NW_CORNER,
-    '2': Tile.NE_CORNER,
-    '3': Tile.SW_CORNER,
-    '4': Tile.SE_CORNER,
+    " ": Tile.NOTHING,
+    ".": Tile.FLOOR,
+    "-": Tile.NORTH_WALL,
+    "_": Tile.SOUTH_WALL,
+    "[": Tile.WEST_WALL,
+    "]": Tile.EAST_WALL,
+    "1": Tile.NW_CORNER,
+    "2": Tile.NE_CORNER,
+    "3": Tile.SW_CORNER,
+    "4": Tile.SE_CORNER,
+    "n": Tile.NORTH_DOOR_WEST,
+    "N": Tile.NORTH_DOOR_EAST,
+    "s": Tile.SOUTH_DOOR_WEST,
+    "S": Tile.SOUTH_DOOR_EAST,
+    "w": Tile.WEST_DOOR_NORTH,
+    "W": Tile.WEST_DOOR_SOUTH,
+    "e": Tile.EAST_DOOR_NORTH,
+    "E": Tile.EAST_DOOR_SOUTH,
 }
 
 # Door slot characters (converted to door tiles or walls based on required connections)
-DOOR_SLOT_CHARS = {'n', 'N', 's', 'S', 'w', 'W', 'e', 'E'}
+DOOR_SLOT_CHARS = {"n", "N", "s", "S", "w", "W", "e", "E"}
+
+
+@dataclass(frozen=True)
+class Position:
+    """A position in the dungeon grid, measured in tiles."""
+
+    row: int
+    column: int
 
 
 @dataclass
 class RoomTemplate:
     """Defines a room shape using ASCII art."""
+
     name: str
     ascii_art: List[str]
 
@@ -83,19 +126,33 @@ class RoomTemplate:
 
     @property
     def has_north_door(self) -> bool:
-        return any('n' in line or 'N' in line for line in self.ascii_art)
+        return any("n" in line or "N" in line for line in self.ascii_art)
 
     @property
     def has_south_door(self) -> bool:
-        return any('s' in line or 'S' in line for line in self.ascii_art)
+        return any("s" in line or "S" in line for line in self.ascii_art)
 
     @property
     def has_east_door(self) -> bool:
-        return any('e' in line or 'E' in line for line in self.ascii_art)
+        return any("e" in line or "E" in line for line in self.ascii_art)
 
     @property
     def has_west_door(self) -> bool:
-        return any('w' in line or 'W' in line for line in self.ascii_art)
+        return any("w" in line or "W" in line for line in self.ascii_art)
+
+    def has_matching_door(self, direction):
+        if direction == "north":
+            return self.has_south_door
+        elif direction == "south":
+            return self.has_north_door
+        elif direction == "east":
+            return self.has_west_door
+        elif direction == "west":
+            return self.has_east_door
+        else:
+            raise RuntimeError(
+                "unrecognized direction {direction} not one of north, south, east, west"
+            )
 
 
 # Pre-defined room templates
@@ -113,7 +170,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "[..........]",
             "[..........]",
             "3____sS____4",
-        ]
+        ],
     ),
     RoomTemplate(
         name="medium",
@@ -126,7 +183,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "[......]",
             "[......]",
             "3__sS__4",
-        ]
+        ],
     ),
     RoomTemplate(
         name="small",
@@ -137,16 +194,34 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "W....E",
             "[....]",
             "3_sS_4",
+        ],
+    ),
+    RoomTemplate(
+        name="east-west",
+        ascii_art=[
+            "1----2",
+            "w....e",
+            "W....E",
+            "3____4",
+        ]
+    ),
+    RoomTemplate(
+        name="north-south",
+        ascii_art=[
+            "1nN2",
+            "[..]",
+            "[..]",
+            "[..]",
+            "[..]",
+            "3sS4",
         ]
     ),
 ]
 
 
-def parse_ascii_room(template: RoomTemplate,
-                     north_door: bool = False,
-                     south_door: bool = False,
-                     east_door: bool = False,
-                     west_door: bool = False) -> List[List[int]]:
+def _parse_ascii_room(
+    template: RoomTemplate,
+) -> List[List[int]]:
     """
     Parse an ASCII room template into a 2D tile array.
 
@@ -156,28 +231,7 @@ def parse_ascii_room(template: RoomTemplate,
     tiles: List[List[int]] = []
 
     for row_idx, line in enumerate(template.ascii_art):
-        row: List[int] = []
-        for col_idx, char in enumerate(line):
-            if char in ASCII_TO_TILE:
-                row.append(ASCII_TO_TILE[char])
-            elif char == 'n':
-                row.append(Tile.NORTH_DOOR_WEST if north_door else Tile.NORTH_WALL)
-            elif char == 'N':
-                row.append(Tile.NORTH_DOOR_EAST if north_door else Tile.NORTH_WALL)
-            elif char == 's':
-                row.append(Tile.SOUTH_DOOR_WEST if south_door else Tile.SOUTH_WALL)
-            elif char == 'S':
-                row.append(Tile.SOUTH_DOOR_EAST if south_door else Tile.SOUTH_WALL)
-            elif char == 'w':
-                row.append(Tile.WEST_DOOR_NORTH if west_door else Tile.WEST_WALL)
-            elif char == 'W':
-                row.append(Tile.WEST_DOOR_SOUTH if west_door else Tile.WEST_WALL)
-            elif char == 'e':
-                row.append(Tile.EAST_DOOR_NORTH if east_door else Tile.EAST_WALL)
-            elif char == 'E':
-                row.append(Tile.EAST_DOOR_SOUTH if east_door else Tile.EAST_WALL)
-            else:
-                row.append(Tile.NOTHING)
+        row = [ASCII_TO_TILE[chr] for chr in line]
 
         # Pad row to template width if needed
         while len(row) < template.width:
@@ -188,18 +242,23 @@ def parse_ascii_room(template: RoomTemplate,
     return tiles
 
 
-def get_door_position(template: RoomTemplate, direction: str) -> Optional[Tuple[int, int]]:
+# TODO: directions should be an enum rather than a
+# string
+def _get_door_position(
+    template: RoomTemplate, direction: str
+) -> Optional[Position]:
     """
     Get the tile position of a door slot in the template.
 
-    Returns (row, col) of the first door tile, or None if no door slot exists.
+    Returns Position of the first door tile, or None if no door slot exists.
     Direction: 'north', 'south', 'east', 'west'
     """
+
     char_map = {
-        'north': 'n',
-        'south': 's',
-        'east': 'e',
-        'west': 'w',
+        "north": "n",
+        "south": "s",
+        "east": "e",
+        "west": "w",
     }
     target_char = char_map.get(direction)
     if not target_char:
@@ -207,62 +266,21 @@ def get_door_position(template: RoomTemplate, direction: str) -> Optional[Tuple[
 
     for row_idx, line in enumerate(template.ascii_art):
         for col_idx, char in enumerate(line):
+            # TODO: this char.lower() is hacky.
+            # instead, let's enumerate both
+            # characters.
             if char.lower() == target_char:
-                return (row_idx, col_idx)
+                return Position(row=row_idx, column=col_idx)
 
     return None
 
-def generate_maze_graph(rows: int, cols: int) -> Tuple[Dict[Tuple[int, int], List[Tuple[int, int]]], Tuple[int, int], Tuple[int, int]]:
-    """
-    Generates a grid of connected rooms using a simple DFS maze algorithm.
-    Returns:
-        connections: dict mapping (r,c) -> list of connected neighbors (r,c)
-        start: (r,c)
-        end: (r,c)
-    """
-    # Initialize grid
-    grid_cells: List[Tuple[int, int]] = [(r, c) for r in range(rows) for c in range(cols)]
-    visited: Set[Tuple[int, int]] = set()
-    stack: List[Tuple[int, int]] = []
-    connections: Dict[Tuple[int, int], List[Tuple[int, int]]] = {cell: [] for cell in grid_cells}
-    
-    # Random start
-    start: Tuple[int, int] = random.choice(grid_cells)
-    stack.append(start)
-    visited.add(start)
-    
-    while stack:
-        current = stack[-1]
-        r, c = current
-        
-        # Find unvisited neighbors
-        neighbors: List[Tuple[int, int]] = []
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < rows and 0 <= nc < cols and (nr, nc) not in visited:
-                neighbors.append((nr, nc))
-        
-        if neighbors:
-            next_cell = random.choice(neighbors)
-            # Add connection (undirected)
-            connections[current].append(next_cell)
-            connections[next_cell].append(current)
-            
-            visited.add(next_cell)
-            stack.append(next_cell)
-        else:
-            stack.pop()
-            
-    # Pick a random end point that is not start
-    end: Tuple[int, int] = start
-    while end == start:
-        end = random.choice(grid_cells)
-        
-    return connections, start, end
 
 # Type Definition
 DungeonMap = np.ndarray
 
+
+# TODO: this shouldn't be in this file, foregrounds should
+# be calculated by the renderer.
 def generate_foreground_from_dungeon(dungeon_map: DungeonMap) -> DungeonMap:
     """
     Generates a foreground map from an existing dungeon map by detecting door tiles
@@ -292,325 +310,441 @@ def generate_foreground_from_dungeon(dungeon_map: DungeonMap) -> DungeonMap:
     return foreground
 
 
-def calculate_room_positions(
-    room_assignments: Dict[Tuple[int, int], RoomTemplate],
-    map_height_rooms: int,
-    map_width_rooms: int
-) -> Tuple[Dict[Tuple[int, int], Tuple[int, int]], Dict[int, int], Dict[int, int]]:
-    """
-    Calculate tile positions for each room accounting for variable sizes.
-
-    Returns:
-        room_positions: Dict mapping (row, col) to (tile_x, tile_y) top-left position
-        col_widths: Dict mapping column index to max room width in that column
-        row_heights: Dict mapping row index to max room height in that row
-    """
-    # Calculate column widths (max room width per column)
-    col_widths: Dict[int, int] = {}
-    for c in range(map_width_rooms):
-        max_width = 0
-        for r in range(map_height_rooms):
-            if (r, c) in room_assignments:
-                max_width = max(max_width, room_assignments[(r, c)].width)
-        col_widths[c] = max_width
-
-    # Calculate row heights (max room height per row)
-    row_heights: Dict[int, int] = {}
-    for r in range(map_height_rooms):
-        max_height = 0
-        for c in range(map_width_rooms):
-            if (r, c) in room_assignments:
-                max_height = max(max_height, room_assignments[(r, c)].height)
-        row_heights[r] = max_height
-
-    # Calculate positions
-    positions: Dict[Tuple[int, int], Tuple[int, int]] = {}
-    for (r, c), template in room_assignments.items():
-        x = sum(col_widths[i] + CORRIDOR_GAP for i in range(c))
-        y = sum(row_heights[i] + CORRIDOR_GAP for i in range(r))
-        positions[(r, c)] = (x, y)
-
-    return positions, col_widths, row_heights
+# TODO: _place_room_on_canvas should happen at the end, when
+# all rooms have been places in theoretical space
+def _place_room_on_canvas(
+    canvas: np.ndarray,
+    template: RoomTemplate,
+    position: Position,
+) -> None:
+    """Place a room on the canvas at the given position."""
+    room_tiles = _parse_ascii_room(template)
+    for local_row, row in enumerate(room_tiles):
+        for local_column, tile in enumerate(row):
+            canvas[position.row + local_row, position.column + local_column] = tile
 
 
-def generate_horizontal_corridor(
-    door_a_row: int,  # Absolute row of room A's east door (top tile)
-    door_a_col: int,  # Absolute col where corridor starts (right of room A)
-    door_b_row: int,  # Absolute row of room B's west door (top tile)
-    door_b_col: int,  # Absolute col where corridor ends (left of room B)
+def _opposite_direction(direction: str) -> str:
+    """Get the opposite direction."""
+    opposites = {"north": "south", "south": "north", "east": "west", "west": "east"}
+    return opposites[direction]
+
+
+# TODO remove _create_corridor_from_template
+def _create_corridor_from_template(
+    template: RoomTemplate, target_length: int, x: int, y: int
 ) -> List[Tuple[int, int, int]]:
     """
-    Generate tiles for a horizontal corridor connecting two rooms.
+    Create corridor tiles by expanding a corridor template to the target length.
+
+    For vertical corridors (NORTH_SOUTH_CORRIDOR), duplicates the middle row.
+    For horizontal corridors (EAST_WEST_CORRIDOR), duplicates the middle column.
 
     Returns list of (row, col, tile_type) tuples.
     """
-    tiles: List[Tuple[int, int, int]] = []
+    corridor_tiles = []
 
-    # Corridor spans from door_a_col to door_b_col - 1
-    corridor_width = door_b_col - door_a_col
+    # Determine if this is a vertical or horizontal corridor
+    is_vertical = template.height > template.width
 
-    if door_a_row == door_b_row:
-        # Straight corridor - doors are aligned
-        for col in range(door_a_col, door_b_col):
-            # Top wall
-            tiles.append((door_a_row - 1, col, Tile.NORTH_WALL))
-            # Floor tiles (2 tiles tall for door)
-            tiles.append((door_a_row, col, Tile.FLOOR))
-            tiles.append((door_a_row + 1, col, Tile.FLOOR))
-            # Bottom wall
-            tiles.append((door_a_row + 2, col, Tile.SOUTH_WALL))
+    # Parse the base template with appropriate doors enabled
+    if is_vertical:
+        # Vertical corridor needs north and south doors
+        base_tiles = _parse_ascii_room(template)
     else:
-        # L-shaped corridor - doors are offset
-        # Go straight for half, then turn, then straight again
-        mid_col = door_a_col + corridor_width // 2
+        # Horizontal corridor needs east and west doors
+        base_tiles = _parse_ascii_room(template)
 
-        # First horizontal segment (from room A door to mid point)
-        for col in range(door_a_col, mid_col):
-            tiles.append((door_a_row - 1, col, Tile.NORTH_WALL))
-            tiles.append((door_a_row, col, Tile.FLOOR))
-            tiles.append((door_a_row + 1, col, Tile.FLOOR))
-            tiles.append((door_a_row + 2, col, Tile.SOUTH_WALL))
+    if is_vertical:
+        # Vertical corridor: height = 3, width = 4
+        # Template layout: Row 0 = north door, Row 1 = floor, Row 2 = south door
+        # Duplicate the middle row (index 1) to reach target length
 
-        # Vertical segment
-        if door_b_row > door_a_row:
-            # Going down
-            # Corner at top
-            tiles.append((door_a_row - 1, mid_col, Tile.NORTH_WALL))
-            tiles.append((door_a_row - 1, mid_col + 1, Tile.NE_CORNER))
+        # First row (could be north or south door depending on context)
+        for col_idx, tile in enumerate(base_tiles[0]):
+            corridor_tiles.append((y, x + col_idx, tile))
 
-            for row in range(door_a_row, door_b_row + 2):
-                tiles.append((row, mid_col, Tile.FLOOR))
-                tiles.append((row, mid_col + 1, Tile.EAST_WALL))
+        # Middle rows (floor) - duplicate to fill the corridor
+        needed_middle_rows = target_length - 2  # Subtract first and last rows
+        for repeat in range(needed_middle_rows):
+            for col_idx, tile in enumerate(base_tiles[1]):
+                corridor_tiles.append((y + 1 + repeat, x + col_idx, tile))
 
-            # Corner at bottom
-            tiles.append((door_b_row + 2, mid_col, Tile.SOUTH_WALL))
-            tiles.append((door_b_row + 2, mid_col + 1, Tile.SE_CORNER))
-        else:
-            # Going up
-            # Corner at bottom
-            tiles.append((door_a_row + 2, mid_col, Tile.SOUTH_WALL))
-            tiles.append((door_a_row + 2, mid_col + 1, Tile.SE_CORNER))
+        # Last row (the opposite door from the first row)
+        for col_idx, tile in enumerate(base_tiles[2]):
+            corridor_tiles.append((y + target_length - 1, x + col_idx, tile))
 
-            for row in range(door_b_row, door_a_row + 2):
-                tiles.append((row, mid_col, Tile.FLOOR))
-                tiles.append((row, mid_col + 1, Tile.EAST_WALL))
-
-            # Corner at top
-            tiles.append((door_b_row - 1, mid_col, Tile.NORTH_WALL))
-            tiles.append((door_b_row - 1, mid_col + 1, Tile.NE_CORNER))
-
-        # Second horizontal segment (from mid point to room B door)
-        for col in range(mid_col, door_b_col):
-            tiles.append((door_b_row - 1, col, Tile.NORTH_WALL))
-            tiles.append((door_b_row, col, Tile.FLOOR))
-            tiles.append((door_b_row + 1, col, Tile.FLOOR))
-            tiles.append((door_b_row + 2, col, Tile.SOUTH_WALL))
-
-    return tiles
-
-
-def generate_vertical_corridor(
-    door_a_col: int,  # Absolute col of room A's south door (left tile)
-    door_a_row: int,  # Absolute row where corridor starts (below room A)
-    door_b_col: int,  # Absolute col of room B's north door (left tile)
-    door_b_row: int,  # Absolute row where corridor ends (above room B)
-) -> List[Tuple[int, int, int]]:
-    """
-    Generate tiles for a vertical corridor connecting two rooms.
-
-    Returns list of (row, col, tile_type) tuples.
-    """
-    
-    # TODO: corridors need convex corners to look right.
-    tiles: List[Tuple[int, int, int]] = []
-
-    # Corridor spans from door_a_row to door_b_row - 1
-    corridor_height = door_b_row - door_a_row
-
-    if door_a_col == door_b_col:
-        # Straight corridor - doors are aligned
-        for row in range(door_a_row, door_b_row):
-            # Left wall
-            tiles.append((row, door_a_col - 1, Tile.WEST_WALL))
-            # Floor tiles (2 tiles wide for door)
-            tiles.append((row, door_a_col, Tile.FLOOR))
-            tiles.append((row, door_a_col + 1, Tile.FLOOR))
-            # Right wall
-            tiles.append((row, door_a_col + 2, Tile.EAST_WALL))
     else:
-        # L-shaped corridor - doors are offset
-        mid_row = door_a_row + corridor_height // 2
+        # Horizontal corridor: height = 4, width = 3
+        # Duplicate the middle column (index 1) to reach target length
+        # Layout: [left col with door, middle col(s) with floor, right col with door]
 
-        # First vertical segment
-        for row in range(door_a_row, mid_row):
-            tiles.append((row, door_a_col - 1, Tile.WEST_WALL))
-            tiles.append((row, door_a_col, Tile.FLOOR))
-            tiles.append((row, door_a_col + 1, Tile.FLOOR))
-            tiles.append((row, door_a_col + 2, Tile.EAST_WALL))
+        # Place each row, but expand the width
+        for row_idx in range(len(base_tiles)):
+            # Left column (west door on middle rows)
+            corridor_tiles.append((y + row_idx, x, base_tiles[row_idx][0]))
 
-        # Horizontal segment
-        if door_b_col > door_a_col:
-            # Going right
-            tiles.append((mid_row, door_a_col - 1, Tile.WEST_WALL))
-            tiles.append((mid_row + 1, door_a_col - 1, Tile.SW_CORNER))
+            # Middle columns (floor on middle rows) - duplicate to fill the corridor
+            needed_middle_cols = target_length - 2  # Subtract left and right columns
+            for repeat in range(needed_middle_cols):
+                corridor_tiles.append(
+                    (y + row_idx, x + 1 + repeat, base_tiles[row_idx][1])
+                )
 
-            for col in range(door_a_col, door_b_col + 2):
-                tiles.append((mid_row, col, Tile.FLOOR))
-                tiles.append((mid_row + 1, col, Tile.SOUTH_WALL))
+            # Right column (east door on middle rows)
+            corridor_tiles.append(
+                (y + row_idx, x + target_length - 1, base_tiles[row_idx][2])
+            )
 
-            tiles.append((mid_row, door_b_col + 2, Tile.EAST_WALL))
-            tiles.append((mid_row + 1, door_b_col + 2, Tile.SE_CORNER))
-        else:
-            # Going left
-            tiles.append((mid_row, door_a_col + 2, Tile.EAST_WALL))
-            tiles.append((mid_row + 1, door_a_col + 2, Tile.SE_CORNER))
-
-            for col in range(door_b_col - 1, door_a_col + 2):
-                tiles.append((mid_row, col, Tile.FLOOR))
-                tiles.append((mid_row + 1, col, Tile.SOUTH_WALL))
-
-            tiles.append((mid_row, door_b_col - 1, Tile.WEST_WALL))
-            tiles.append((mid_row + 1, door_b_col - 1, Tile.SW_CORNER))
-
-        # Second vertical segment
-        for row in range(mid_row, door_b_row):
-            tiles.append((row, door_b_col - 1, Tile.WEST_WALL))
-            tiles.append((row, door_b_col, Tile.FLOOR))
-            tiles.append((row, door_b_col + 1, Tile.FLOOR))
-            tiles.append((row, door_b_col + 2, Tile.EAST_WALL))
-
-    return tiles
+    return corridor_tiles
 
 
-def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[DungeonMap, Tuple[int, int], Dict[Tuple[int, int], Tuple[int, int]], Dict[Tuple[int, int], RoomTemplate]]:
+def _calculate_room_placement(
+    direction: str, door_position: Position, new_template: RoomTemplate
+) -> Position:
     """
-    Generates a dungeon with variable-size rooms and corridors.
+    Calculate where a new room should be placed to connect to an existing door.
+
+    Args:
+        direction: The direction the existing door faces ('north', 'south', 'east', 'west')
+        door_position: Position of the existing door
+        new_template: The template for the new room to place
+
+    Returns: Position where the new room's top-left corner should be placed
+    """
+
+    # TODO: can we both of the new_template fit.
+    # To fit, new_template's complementary door
+    # should be in a matching position to door_position
+
+    if direction == "north":
+        target_door_offset = Position(row=door_position.row - 1, column=door_position.column)
+    elif direction == "south":
+        target_door_offset = Position(row=door_position.row + 1, column=door_position.column)
+    elif direction == "east":
+        target_door_offset = Position(row=door_position.row, column=door_position.column + 1)
+    elif direction == "west":
+        target_door_offset = Position(row=door_position.row, column=door_position.column - 1)
+    else:
+        raise RuntimeError("unrecognized direction {direction}")
+
+    complimentary_direction = _opposite_direction(direction)
+    complimentary_door = _get_door_position(new_template, complimentary_direction)
+    if not complimentary_door:
+        raise RuntimeError("cannot place room")
+
+    return Position(
+        row=target_door_offset.row - complimentary_door.row,
+        column=target_door_offset.column - complimentary_door.column,
+    )
+
+
+def _would_overlap(
+    canvas: np.ndarray, template: RoomTemplate, position: Position
+) -> bool:
+    """Check if placing a room at the given position would overlap existing tiles."""
+    for local_row in range(template.height):
+        for local_column in range(template.width):
+            if canvas[position.row + local_row, position.column + local_column] != Tile.NOTHING:
+                return True
+    return False
+
+
+def _replace_blind_doors_with_walls(
+    dungeon_map: np.ndarray,
+    room_positions: Dict[int, Position],
+    room_assignments: Dict[int, RoomTemplate],
+    connected_doors: Set[Tuple[int, str]],
+) -> None:
+    """
+    Replace all unconnected door tiles with appropriate wall tiles.
+
+    Uses the connected_doors set to determine which doors were actually connected,
+    rather than making assumptions based on adjacent tiles.
+    """
+    # Mapping from door tiles to their corresponding wall tiles
+    door_to_wall = {
+        Tile.NORTH_DOOR_WEST: Tile.NORTH_WALL,
+        Tile.NORTH_DOOR_EAST: Tile.NORTH_WALL,
+        Tile.SOUTH_DOOR_WEST: Tile.SOUTH_WALL,
+        Tile.SOUTH_DOOR_EAST: Tile.SOUTH_WALL,
+        Tile.WEST_DOOR_NORTH: Tile.WEST_WALL,
+        Tile.WEST_DOOR_SOUTH: Tile.WEST_WALL,
+        Tile.EAST_DOOR_NORTH: Tile.EAST_WALL,
+        Tile.EAST_DOOR_SOUTH: Tile.EAST_WALL,
+    }
+
+    # For each room, check its doors
+    for room_id, room_position in room_positions.items():
+        template = room_assignments[room_id]
+
+        # Check each direction
+        for direction in ["north", "south", "east", "west"]:
+            # Skip if this door was connected
+            if (room_id, direction) in connected_doors:
+                continue
+
+            # Skip if template doesn't have this door
+            direction_check = {
+                "north": template.has_north_door,
+                "south": template.has_south_door,
+                "east": template.has_east_door,
+                "west": template.has_west_door,
+            }
+            if not direction_check[direction]:
+                continue
+
+            # Get door position in template
+            door_pos = _get_door_position(template, direction)
+            if not door_pos:
+                continue
+
+            # Calculate absolute position of door tiles
+            door_row = room_position.row + door_pos.row
+            door_col = room_position.column + door_pos.column
+
+            # Replace door tiles with walls
+            # Each door has two tiles (e.g., NORTH_DOOR_WEST and NORTH_DOOR_EAST)
+            if direction in ["north", "south"]:
+                # North/South doors are two tiles wide
+                for col_offset in range(2):
+                    tile = dungeon_map[door_row, door_col + col_offset]
+                    if tile in door_to_wall:
+                        dungeon_map[door_row, door_col + col_offset] = door_to_wall[
+                            tile
+                        ]
+            else:
+                # East/West doors are two tiles tall
+                for row_offset in range(2):
+                    tile = dungeon_map[door_row + row_offset, door_col]
+                    if tile in door_to_wall:
+                        dungeon_map[door_row + row_offset, door_col] = door_to_wall[
+                            tile
+                        ]
+
+
+def _crop_dungeon_map(dungeon_map: np.ndarray) -> Tuple[np.ndarray, Position]:
+    """
+    Crop the dungeon map to the minimum bounding box containing all non-zero tiles.
+
+    Returns: (cropped_map, offset) where offset is the Position of the crop origin
+    """
+    # Find bounding box
+    rows, cols = np.where(dungeon_map != Tile.NOTHING)
+    if len(rows) == 0:
+        # Empty map
+        return dungeon_map[:10, :10], Position(row=0, column=0)
+
+    min_row, max_row = rows.min(), rows.max()
+    min_col, max_col = cols.min(), cols.max()
+
+    # Add some padding
+    padding = 5
+    min_row = max(0, min_row - padding)
+    min_col = max(0, min_col - padding)
+    max_row = min(dungeon_map.shape[0] - 1, max_row + padding)
+    max_col = min(dungeon_map.shape[1] - 1, max_col + padding)
+
+    cropped = dungeon_map[min_row : max_row + 1, min_col : max_col + 1]
+    return cropped, Position(row=min_row, column=min_col)
+
+
+def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
+    DungeonMap,
+    Tuple[int, int],
+    Dict[Tuple[int, int], Tuple[int, int]],
+    Dict[Tuple[int, int], RoomTemplate],
+]:
+    """
+    Generates a dungeon by organically growing rooms from open doors.
+
+    Uses the ultra-simple algorithm documented at the top of this file.
+
+    Parameters:
+        map_width_rooms: Ignored (kept for compatibility). Total rooms = width * height
+        map_height_rooms: Ignored (kept for compatibility). Total rooms = width * height
 
     Returns:
         dungeon_map: The tile map
         start_pos_pixel: Starting position in pixels
-        room_positions: Dict mapping (row, col) to (tile_x, tile_y) position
-        room_templates: Dict mapping (row, col) to RoomTemplate used
+        room_positions: Dict mapping room_id to (tile_x, tile_y) position
+        room_assignments: Dict mapping room_id to RoomTemplate used
     """
-    connections, start_room, end_room = generate_maze_graph(map_height_rooms, map_width_rooms)
+    # TODO: update this signature to take a single "num_rooms" argument
+    # rather than a width and height. Update the return value to identify
+    # rooms with a single id rather than a (row, column) pair
 
-    # TODO: corridors must be long enough to allow for L-shapes and doorways, which
-    # means at least three tiles of gap between rooms with doors that are not aligned.
-    # (one tile each for doorways and one tile for a walkway)
+    target_num_rooms = map_width_rooms * map_height_rooms
 
-    # Assign random templates to each room
-    room_assignments: Dict[Tuple[int, int], RoomTemplate] = {}
-    for r in range(map_height_rooms):
-        for c in range(map_width_rooms):
-            room_assignments[(r, c)] = random.choice(ROOM_TEMPLATES)
+    # We'll use a much larger canvas to avoid worrying about bounds initially
+    # Estimate: each room ~12x10, each corridor ~8, max branches ~4 per room
+    # Rough estimate: 30 rooms * (12 + 8) * 4 directions = ~2400 tiles per dimension
+    # TODO: We should create the canvas after we've built the map, we can
+    # figure out the size by looking at the sizes and position of the rooms.
+    canvas_size = max(2000, target_num_rooms * 100)
 
-    # Calculate room positions
-    room_positions, col_widths, row_heights = calculate_room_positions(
-        room_assignments, map_height_rooms, map_width_rooms
+    # Create empty canvas (we'll crop it later)
+    dungeon_map: DungeonMap = np.zeros((canvas_size, canvas_size), dtype=int)
+
+    # Track room information
+    room_positions: Dict[int, Position] = {}  # room_id -> Position
+    room_assignments: Dict[int, RoomTemplate] = {}  # room_id -> RoomTemplate
+
+    # Track open doors: list of (room_id, direction, door_position)
+    # direction: 'north', 'south', 'east', 'west'
+    open_doors: List[Tuple[int, str, Position]] = []
+
+    # Track connected doors: set of (room_id, direction) that were successfully connected
+    connected_doors: Set[Tuple[int, str]] = set()
+
+    # Start with first room at center of canvas
+    start_room_id = 0
+    start_position = Position(row=canvas_size // 2, column=canvas_size // 2)
+    start_template = random.choice(ROOM_TEMPLATES)
+
+    room_positions[start_room_id] = start_position
+    room_assignments[start_room_id] = start_template
+
+    # Place start room on canvas
+    _place_room_on_canvas(
+        dungeon_map,
+        start_template,
+        start_position,
     )
 
-    # Calculate total map size
-    total_width = sum(col_widths.values()) + CORRIDOR_GAP * (map_width_rooms - 1)
-    total_height = sum(row_heights.values()) + CORRIDOR_GAP * (map_height_rooms - 1)
+    # Add all doors from the start room to the open doors queue
+    for direction in ["north", "south", "east", "west"]:
+        door_pos = _get_door_position(start_template, direction)
+        if door_pos:
+            open_doors.append(
+                (
+                    start_room_id,
+                    direction,
+                    Position(
+                        row=start_position.row + door_pos.row,
+                        column=start_position.column + door_pos.column,
+                    ),
+                )
+            )
 
-    # Create empty map
-    dungeon_map: DungeonMap = np.zeros((total_height, total_width), dtype=int)
+    # Keep adding rooms until we reach target
+    next_room_id = 1
+    last_room_id = start_room_id
 
-    # Place rooms
-    for (r, c), template in room_assignments.items():
-        pos_x, pos_y = room_positions[(r, c)]
-        conns = connections[(r, c)]
+    while len(room_assignments) < target_num_rooms and open_doors:
+        # Pick a random open door
+        if not open_doors:
+            break
 
-        # Determine required doors
-        north_door = (r - 1, c) in conns
-        south_door = (r + 1, c) in conns
-        west_door = (r, c - 1) in conns
-        east_door = (r, c + 1) in conns
+        # direction: here is "north" for a NORTH_* door,
+        # which is on the north edge of the room.
+        random.shuffle(open_doors)
+        source_room_id, direction, door_position = open_doors.pop()
 
-        # Parse and place room tiles
-        room_tiles = parse_ascii_room(template, north_door, south_door, east_door, west_door)
+        # Pick a random room template that has the corresponding door
+        matching_templates = [
+            room for room in ROOM_TEMPLATES if room.has_matching_door(direction)
+        ]
+        if not matching_templates:
+            break
 
-        for local_y, row in enumerate(room_tiles):
-            for local_x, tile in enumerate(row):
-                map_y = pos_y + local_y
-                map_x = pos_x + local_x
-                if 0 <= map_y < total_height and 0 <= map_x < total_width:
-                    dungeon_map[map_y, map_x] = tile
+        random.shuffle(matching_templates)
 
-    # Generate corridors for each connection
-    processed_connections: Set[Tuple[Tuple[int, int], Tuple[int, int]]] = set()
+        new_template = None
+        for possible_template in matching_templates:
+            possible_room_position = _calculate_room_placement(
+                direction, door_position, possible_template
+            )
 
-    for cell_a, neighbors in connections.items():
-        for cell_b in neighbors:
-            # Avoid processing same connection twice
-            conn_key = (min(cell_a, cell_b), max(cell_a, cell_b))
-            if conn_key in processed_connections:
-                continue
-            processed_connections.add(conn_key)
+            if not _would_overlap(dungeon_map, possible_template, possible_room_position):
+                new_room_position = possible_room_position
+                new_template = possible_template
+                # This placement will work!
+                break
 
-            r_a, c_a = cell_a
-            r_b, c_b = cell_b
-            template_a = room_assignments[cell_a]
-            template_b = room_assignments[cell_b]
-            pos_a = room_positions[cell_a]
-            pos_b = room_positions[cell_b]
+        if not new_template:
+            # We can't find a template that'll work for this door.
+            # give up.
+            continue
 
-            corridor_tiles: List[Tuple[int, int, int]] = []
+        # Mark the source door as connected
+        connected_doors.add((source_room_id, direction))
 
-            if c_b == c_a + 1:
-                # Horizontal connection (A is west of B)
-                door_a_pos = get_door_position(template_a, 'east')
-                door_b_pos = get_door_position(template_b, 'west')
+        _place_room_on_canvas(
+            dungeon_map,
+            new_template,
+            new_room_position,
+        )
+        room_positions[next_room_id] = new_room_position
+        room_assignments[next_room_id] = new_template
 
-                if door_a_pos and door_b_pos:
-                    # Absolute positions
-                    door_a_row = pos_a[1] + door_a_pos[0]
-                    door_a_col = pos_a[0] + template_a.width  # Right edge of room A
-                    door_b_row = pos_b[1] + door_b_pos[0]
-                    door_b_col = pos_b[0]  # Left edge of room B
+        # Mark the new room's connection door as connected
+        # TODO: this seems a little hacky, since we're making assumptions
+        # about _calculate_room_placement here
+        connected_doors.add((next_room_id, _opposite_direction(direction)))
 
-                    corridor_tiles = generate_horizontal_corridor(
-                        door_a_row, door_a_col, door_b_row, door_b_col
+        # Add new room's open doors to the queue (except the one we just connected)
+        for new_direction in ["north", "south", "east", "west"]:
+            if (next_room_id, new_direction) in connected_doors:
+                continue  # This door is already connected
+
+            door_pos = _get_door_position(new_template, new_direction)
+            if door_pos:
+                open_doors.append(
+                    (
+                        next_room_id,
+                        new_direction,
+                        Position(
+                            row=new_room_position.row + door_pos.row,
+                            column=new_room_position.column + door_pos.column,
+                        ),
                     )
+                )
 
-            elif r_b == r_a + 1:
-                # Vertical connection (A is north of B)
-                door_a_pos = get_door_position(template_a, 'south')
-                door_b_pos = get_door_position(template_b, 'north')
+        last_room_id = next_room_id
+        next_room_id += 1
 
-                if door_a_pos and door_b_pos:
-                    # Absolute positions
-                    door_a_col = pos_a[0] + door_a_pos[1]
-                    door_a_row = pos_a[1] + template_a.height  # Bottom edge of room A
-                    door_b_col = pos_b[0] + door_b_pos[1]
-                    door_b_row = pos_b[1]  # Top edge of room B
+    # Place goal in the last room added
+    goal_room_id = last_room_id
+    goal_pos = room_positions[goal_room_id]
+    goal_template = room_assignments[goal_room_id]
+    goal_row = goal_pos.row + goal_template.height // 2
+    goal_col = goal_pos.column + goal_template.width // 2
+    dungeon_map[goal_row, goal_col] = Tile.GOAL
 
-                    corridor_tiles = generate_vertical_corridor(
-                        door_a_col, door_a_row, door_b_col, door_b_row
-                    )
+    # Replace all unconnected doors with walls
+    _replace_blind_doors_with_walls(
+        dungeon_map, room_positions, room_assignments, connected_doors
+    )
 
-            # Place corridor tiles
-            for row, col, tile in corridor_tiles:
-                if 0 <= row < total_height and 0 <= col < total_width:
-                    # Only place if empty (don't overwrite room tiles)
-                    if dungeon_map[row, col] == Tile.NOTHING:
-                        dungeon_map[row, col] = tile
+    # Crop the dungeon map to the actual used area
+    dungeon_map, crop_offset = _crop_dungeon_map(dungeon_map)
 
-    # Place goal in center of end room
-    end_pos = room_positions[end_room]
-    end_template = room_assignments[end_room]
-    goal_tile_y = end_pos[1] + end_template.height // 2
-    goal_tile_x = end_pos[0] + end_template.width // 2
-    dungeon_map[goal_tile_y, goal_tile_x] = Tile.GOAL
+    # Adjust all room positions by the crop offset
+    room_positions_adjusted: Dict[int, Position] = {}
+    for room_id, pos in room_positions.items():
+        room_positions_adjusted[room_id] = Position(
+            row=pos.row - crop_offset.row,
+            column=pos.column - crop_offset.column,
+        )
 
     # Calculate start position in pixels
-    start_pos = room_positions[start_room]
-    start_template = room_assignments[start_room]
+    start_pos = room_positions_adjusted[start_room_id]
+    start_template = room_assignments[start_room_id]
     start_pos_pixel = (
-        (start_pos[0] + start_template.width // 2) * 64,
-        (start_pos[1] + start_template.height // 2) * 64
+        (start_pos.column + start_template.width // 2) * 64,
+        (start_pos.row + start_template.height // 2) * 64,
     )
 
-    return dungeon_map, start_pos_pixel, room_positions, room_assignments
+    # Convert room_ids to (row, col) format for compatibility
+    # We'll just assign sequential grid positions
+    room_positions_compat = {}
+    room_assignments_compat = {}
+    for idx, (room_id, template) in enumerate(room_assignments.items()):
+        grid_row = idx // map_width_rooms
+        grid_col = idx % map_width_rooms
+        pos = room_positions_adjusted[room_id]
+        room_positions_compat[(grid_row, grid_col)] = (pos.column, pos.row)
+        room_assignments_compat[(grid_row, grid_col)] = template
 
-
+    return dungeon_map, start_pos_pixel, room_positions_compat, room_assignments_compat

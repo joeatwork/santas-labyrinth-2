@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## General Guidelines and Style
+
+We prefer to write unit tests and use them to validate new features and prevent regressions. Prefer simple tests that are short and easy to understand to exhaustive tests, it's ok to test a few cases rather than overcomplicate the tests.
+
+In many cases, we prefer to fail with exceptions when inputs are nonsensical.
+
+We prefer explicit arguments to default arguments.
+
 ## Development Commands
 
 This project uses `uv` for Python package management and execution:
