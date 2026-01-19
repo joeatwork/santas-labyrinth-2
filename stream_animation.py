@@ -61,9 +61,9 @@ def main():
         title_cards.append(title_path)  # Rotate title cards
         
         # TODO: renable title card and video clip once we've validated that dungeonwalk is working
-        # video_program.add_content(TitleCard(title_path, assets), 10.0)
+        video_program.add_content(TitleCard(title_path, assets), 10.0)
         video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 120.0)
-        # video_program.add_content(VideoClip(video_path, 30, output_fps=args.fps), 20.0)
+        video_program.add_content(VideoClip(video_path, 30, output_fps=args.fps), 20.0)
      
     video_program.start()
 

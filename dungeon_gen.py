@@ -69,12 +69,6 @@ class Tile:
 ROOM_WIDTH: int = 12
 ROOM_HEIGHT: int = 10
 
-# Corridor gap between rooms (for variable-size rooms)
-# Minimum is 8 to allow for L-shaped corridors with proper walls:
-# - 4 tiles for the turning section (wall + 2 floor + wall)
-# - 4 tiles minimum for connecting segments
-CORRIDOR_GAP: int = 8
-
 # ASCII character to tile mapping
 ASCII_TO_TILE: Dict[str, int] = {
     " ": Tile.NOTHING,
@@ -328,75 +322,6 @@ def _opposite_direction(direction: str) -> str:
     """Get the opposite direction."""
     opposites = {"north": "south", "south": "north", "east": "west", "west": "east"}
     return opposites[direction]
-
-
-# TODO remove _create_corridor_from_template
-def _create_corridor_from_template(
-    template: RoomTemplate, target_length: int, x: int, y: int
-) -> List[Tuple[int, int, int]]:
-    """
-    Create corridor tiles by expanding a corridor template to the target length.
-
-    For vertical corridors (NORTH_SOUTH_CORRIDOR), duplicates the middle row.
-    For horizontal corridors (EAST_WEST_CORRIDOR), duplicates the middle column.
-
-    Returns list of (row, col, tile_type) tuples.
-    """
-    corridor_tiles = []
-
-    # Determine if this is a vertical or horizontal corridor
-    is_vertical = template.height > template.width
-
-    # Parse the base template with appropriate doors enabled
-    if is_vertical:
-        # Vertical corridor needs north and south doors
-        base_tiles = _parse_ascii_room(template)
-    else:
-        # Horizontal corridor needs east and west doors
-        base_tiles = _parse_ascii_room(template)
-
-    if is_vertical:
-        # Vertical corridor: height = 3, width = 4
-        # Template layout: Row 0 = north door, Row 1 = floor, Row 2 = south door
-        # Duplicate the middle row (index 1) to reach target length
-
-        # First row (could be north or south door depending on context)
-        for col_idx, tile in enumerate(base_tiles[0]):
-            corridor_tiles.append((y, x + col_idx, tile))
-
-        # Middle rows (floor) - duplicate to fill the corridor
-        needed_middle_rows = target_length - 2  # Subtract first and last rows
-        for repeat in range(needed_middle_rows):
-            for col_idx, tile in enumerate(base_tiles[1]):
-                corridor_tiles.append((y + 1 + repeat, x + col_idx, tile))
-
-        # Last row (the opposite door from the first row)
-        for col_idx, tile in enumerate(base_tiles[2]):
-            corridor_tiles.append((y + target_length - 1, x + col_idx, tile))
-
-    else:
-        # Horizontal corridor: height = 4, width = 3
-        # Duplicate the middle column (index 1) to reach target length
-        # Layout: [left col with door, middle col(s) with floor, right col with door]
-
-        # Place each row, but expand the width
-        for row_idx in range(len(base_tiles)):
-            # Left column (west door on middle rows)
-            corridor_tiles.append((y + row_idx, x, base_tiles[row_idx][0]))
-
-            # Middle columns (floor on middle rows) - duplicate to fill the corridor
-            needed_middle_cols = target_length - 2  # Subtract left and right columns
-            for repeat in range(needed_middle_cols):
-                corridor_tiles.append(
-                    (y + row_idx, x + 1 + repeat, base_tiles[row_idx][1])
-                )
-
-            # Right column (east door on middle rows)
-            corridor_tiles.append(
-                (y + row_idx, x + target_length - 1, base_tiles[row_idx][2])
-            )
-
-    return corridor_tiles
 
 
 def _calculate_room_placement(
