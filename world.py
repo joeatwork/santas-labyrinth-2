@@ -66,7 +66,8 @@ class Dungeon:
         # For now, return based on approximate position
         return (0, 0)
 
-    def find_goal_position(self) -> Optional[Tuple[float, float]]:
+    # TODO: caller wants a tile position, not a pixel position!
+    def find_goal_position(self) -> Optional[Tuple[int, int]]:
         """Returns pixel position (x, y) of the goal tile, or None if not found."""
         for row in range(self.rows):
             for col in range(self.cols):
@@ -82,6 +83,7 @@ class Dungeon:
             return self.map[row, col] == Tile.GOAL
         return False
 
+    # TODO: use a data class for doors rather than tuples
     def find_doors_in_room(self, room_row: int, room_col: int) -> List[Tuple[int, float, float]]:
         """
         Returns list of (direction, pixel_x, pixel_y) for doors in the given room.
@@ -132,12 +134,20 @@ class Dungeon:
 class Hero:
     def __init__(self, x: float, y: float,
                  random_choice: Optional[Callable[[List], any]] = None) -> None:
+        
+        # Pixel coordinates
         self.x: float = float(x)
         self.y: float = float(y)
         self.speed: float = 150.0 # pixels/sec
         self.direction: int = 0 # 0=East, 1=South, 2=West, 3=North
+        
+        # Pixel target of next move
         self.target_x: float = x
         self.target_y: float = y
+
+        # Ultimate goal target in row / col
+        self.next_goal_row: Optional[int] = None
+        self.next_goal_col: Optional[int] = None
         self.state: str = 'idle' # idle, walking
 
         # Animation State
@@ -145,6 +155,7 @@ class Hero:
         self.dist_accumulator: float = 0.0 # Track distance for toggling
 
         # Navigation state
+        self.last_door_direction: Optional[int] = None  # Direction of last door passed through
         self.current_room: Optional[Tuple[int, int]] = None
         self.selected_door: Optional[Tuple[int, float, float]] = None  # (direction, x, y)
         self.entry_door_direction: Optional[int] = None  # Direction of door we entered through
@@ -166,145 +177,102 @@ class Hero:
             self.move(dt)
 
     def decide_next_move(self, dungeon: Dungeon) -> None:
+        """
+        Hero uses the following algorithm to navigate the dungeon:
+        
+        If the hero has no selected target, select a target based on the following priority:
+            - The goal if it is in the same room as the hero
+            - A walkable space just beyond a door in the current room that the hero did not pass through most recently
+            - A walkable space just beyond the door the hero did pass through most recently
+
+        If the hero has a selected target, compute a path to that target using BFS and follow it.
+
+        When the hero arrives at a target space, forget that target and select a new one.
+
+        """
         hero_col = int(self.x / TILE_SIZE)
         hero_row = int(self.y / TILE_SIZE)
 
-        # Check if hero is standing in a door - keep moving through it
         current_tile = dungeon.map[hero_row, hero_col]
-        door_tiles = (
-            Tile.NORTH_DOOR_WEST, Tile.NORTH_DOOR_EAST,
-            Tile.SOUTH_DOOR_WEST, Tile.SOUTH_DOOR_EAST,
-            Tile.WEST_DOOR_NORTH, Tile.WEST_DOOR_SOUTH,
-            Tile.EAST_DOOR_NORTH, Tile.EAST_DOOR_SOUTH,
-        )
-        if current_tile in door_tiles:
-            # Continue in current direction until through the door
-            target_col = hero_col
-            target_row = hero_row
+        
+        if current_tile in (Tile.NORTH_DOOR_WEST, Tile.NORTH_DOOR_EAST):
+            self.last_door_direction = 3            
+        elif current_tile in (Tile.SOUTH_DOOR_WEST, Tile.SOUTH_DOOR_EAST):
+            self.last_door_direction = 1            
+        elif current_tile in (Tile.EAST_DOOR_NORTH, Tile.EAST_DOOR_SOUTH):
+            self.last_door_direction = 0            
+        elif current_tile in (Tile.WEST_DOOR_NORTH, Tile.WEST_DOOR_SOUTH):
+            self.last_door_direction = 2
 
-            if self.direction == 0:  # East
-                target_col += 1
-            elif self.direction == 1:  # South
-                target_row += 1
-            elif self.direction == 2:  # West
-                target_col -= 1
-            elif self.direction == 3:  # North
-                target_row -= 1
-
-            target_x = target_col * TILE_SIZE + TILE_SIZE / 2
-            target_y = target_row * TILE_SIZE + TILE_SIZE / 2
-
-            if dungeon.is_walkable(target_x, target_y):
-                self.target_x = target_x
-                self.target_y = target_y
-                self.state = 'walking'
-            return
-
-        # Find goal position
-        goal_pos = dungeon.find_goal_position()
-        if goal_pos is None:
-            return
-
-        goal_x, goal_y = goal_pos
-        goal_col = int(goal_x / TILE_SIZE)
-        goal_row = int(goal_y / TILE_SIZE)
-
-        if hero_col == goal_col and hero_row == goal_row:
-            # On the goal - don't move
-            return
-
-        # Get current room
         current_room = dungeon.get_room_coords(self.x, self.y)
-        goal_room = dungeon.get_room_coords(goal_x, goal_y)
 
-        # Reset selected door and path if we changed rooms
-        if current_room != self.current_room:
-            # Track which door we entered through (opposite of facing direction)
-            # 0=East <-> 2=West, 1=South <-> 3=North
-            if self.current_room is not None:
-                self.entry_door_direction = (self.direction + 2) % 4
-            else:
-                self.entry_door_direction = None  # Starting room, no entry door
-            self.current_room = current_room
-            self.selected_door = None
-            self.current_path = None  # Invalidate path on room change
+        if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
+            # Reached target
+            self.next_goal_row = None
+            self.next_goal_col = None
+            self.current_path = None
             self.path_index = 0
+            self._path_target = None
 
-        # Determine navigation target
-        if current_room == goal_room:
-            # Same room as goal - approach the goal
-            nav_target_x, nav_target_y = goal_x, goal_y
-        else:
-            # Need to navigate through doors
+        if self.next_goal_row is None or self.next_goal_col is None:
+            # Select new target
+            goal_pos = dungeon.find_goal_position()
+            if goal_pos:
+                # TODO: call get_room_coords with tile positions, not pixel positions
+                goal_room = dungeon.get_room_coords(
+                    goal_pos[0], goal_pos[1]
+                )
+                
+                if current_room == goal_room:
+                    # Goal is in the same room - target it
+                    self.next_goal_row = goal_pos[1] // TILE_SIZE
+                    self.next_goal_col = goal_pos[0] // TILE_SIZE
+        
+        if self.next_goal_row is None or self.next_goal_col is None:
             doors = dungeon.find_doors_in_room(current_room[0], current_room[1])
-
-            if not doors:
-                return  # No doors, can't move
-
-            # Check if we're facing a door (aligned and facing correct direction)
-            facing_door = None
-            for door in doors:
-                door_dir, door_x, door_y = door
-                if door_dir == self.direction:
-                    # Check if we're aligned with this door
-                    if door_dir in (0, 2):  # East/West - check y alignment
-                        if abs(self.y - door_y) < TILE_SIZE:
-                            facing_door = door
-                            break
-                    else:  # North/South - check x alignment
-                        if abs(self.x - door_x) < TILE_SIZE:
-                            facing_door = door
-                            break
-
-            if facing_door:
-                # Approach the door we're facing
-                nav_target_x, nav_target_y = facing_door[1], facing_door[2]
-            else:
-                # Select a door randomly (but keep it stable)
-                if self.selected_door is None or self.selected_door not in doors:
-                    # Filter out the entry door if there are other options
-                    available_doors = doors
-                    if self.entry_door_direction is not None and len(doors) > 1:
-                        available_doors = [d for d in doors if d[0] != self.entry_door_direction]
-                        if not available_doors:
-                            available_doors = doors  # Fallback if filtering removed all
-                    self.selected_door = self._random_choice(available_doors)
-
-                # Line up with the selected door, or approach if aligned
-                door_dir, door_x, door_y = self.selected_door
-                if door_dir in (0, 2):  # East/West door - need to align Y
-                    if abs(self.y - door_y) < TILE_SIZE:
-                        # Already aligned, approach the door
-                        nav_target_x, nav_target_y = door_x, door_y
-                    else:
-                        nav_target_x, nav_target_y = self.x, door_y
-                else:  # North/South door - need to align X
-                    if abs(self.x - door_x) < TILE_SIZE:
-                        # Already aligned, approach the door
-                        nav_target_x, nav_target_y = door_x, door_y
-                    else:
-                        nav_target_x, nav_target_y = door_x, self.y
-
-        # Use BFS to find path to navigation target
-        target_col = int(nav_target_x / TILE_SIZE)
-        target_row = int(nav_target_y / TILE_SIZE)
-
+            other_doors = [d for d in doors if d[0] != self.last_door_direction]
+            chosen_door = None
+            if other_doors:
+                # Select a door we did not just come through
+                chosen_door = self._random_choice(other_doors)
+            elif doors:
+                # No other doors, select the door we came through
+                chosen_door = doors[0]
+            
+            if chosen_door:
+                door_dir, door_x, door_y = chosen_door
+                # Set target to a tile just beyond the door
+                if door_dir == 0:  # East
+                    self.next_goal_row = int(door_y / TILE_SIZE)
+                    self.next_goal_col = int(door_x / TILE_SIZE) + 2
+                elif door_dir == 1:  # South
+                    self.next_goal_row = int(door_y / TILE_SIZE) + 2
+                    self.next_goal_col = int(door_x / TILE_SIZE)
+                elif door_dir == 2:  # West
+                    self.next_goal_row = int(door_y / TILE_SIZE)
+                    self.next_goal_col = int(door_x / TILE_SIZE) - 2
+                elif door_dir == 3:  # North
+                    self.next_goal_row = int(door_y / TILE_SIZE) - 2
+                    self.next_goal_col = int(door_x / TILE_SIZE)
+                else:
+                    raise ValueError("Invalid door direction {door_dir}")
+            
         # Check if we need to (re)compute the path
         should_recompute_path = (
             self.current_path is None or
             self.path_index >= len(self.current_path) or
-            self._path_target != (target_row, target_col)
+            self._path_target != (self.next_goal_row, self.next_goal_col)
         )
 
         if should_recompute_path:
             self.current_path = find_path_bfs(
                 hero_row, hero_col,
-                target_row, target_col,
+                self.next_goal_row, self.next_goal_col,
                 dungeon.is_tile_walkable,
                 max_distance=150,
             )
             self.path_index = 0
-            self._path_target = (target_row, target_col)
+            self._path_target = (self.next_goal_row, self.next_goal_col)
 
         # Follow the computed path
         if self.current_path and self.path_index < len(self.current_path):

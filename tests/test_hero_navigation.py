@@ -264,8 +264,8 @@ class TestHeroNavigatesToDoor:
         hero.decide_next_move(dungeon)
 
         assert hero.state == 'walking'
-        assert hero.selected_door is not None
-        assert hero.selected_door[0] == 0  # East door selected
+        assert hero.next_goal_col == 12
+        assert hero.next_goal_row == 4
 
     def test_hero_uses_injected_random_choice(self):
         dungeon = MockDungeon(2, 2)
