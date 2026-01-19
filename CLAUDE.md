@@ -10,6 +10,10 @@ In many cases, we prefer to fail with exceptions when inputs are nonsensical.
 
 We prefer explicit arguments to default arguments.
 
+This is a small code base (at the moment) and often breaking changes to APIs are
+easier than maintaining old versions, since it may be practical to update all callers
+with little effort.
+
 ## Development Commands
 
 This project uses `uv` for Python package management and execution:

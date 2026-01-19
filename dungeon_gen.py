@@ -19,10 +19,8 @@ We grow the dungeon organically by connecting rooms through their doors.
 import random
 import numpy as np
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Tuple, List, Dict, Set, Optional
-
-# TODO: eliminate optional arguments from functions where possible, prefer explicit parameters.
-# Do this throughout the codebase.
 
 
 # Tile Constants (Matching animation.py expectations or defining new ones)
@@ -117,6 +115,35 @@ class Position:
     column: int
 
 
+class Direction(Enum):
+    """Cardinal directions for door placement and room connections."""
+
+    NORTH = auto()
+    SOUTH = auto()
+    EAST = auto()
+    WEST = auto()
+
+    def opposite(self) -> "Direction":
+        """Returns the opposite direction."""
+        opposites = {
+            Direction.NORTH: Direction.SOUTH,
+            Direction.SOUTH: Direction.NORTH,
+            Direction.EAST: Direction.WEST,
+            Direction.WEST: Direction.EAST,
+        }
+        return opposites[self]
+
+    def step(self) -> Position:
+        """Returns the Position offset for moving one step in this direction."""
+        steps = {
+            Direction.NORTH: Position(row=-1, column=0),
+            Direction.SOUTH: Position(row=1, column=0),
+            Direction.EAST: Position(row=0, column=1),
+            Direction.WEST: Position(row=0, column=-1),
+        }
+        return steps[self]
+
+
 @dataclass
 class RoomTemplate:
     """Defines a room shape using ASCII art."""
@@ -148,19 +175,23 @@ class RoomTemplate:
     def has_west_door(self) -> bool:
         return any("w" in line or "W" in line for line in self.ascii_art)
 
-    def has_matching_door(self, direction):
-        if direction == "north":
-            return self.has_south_door
-        elif direction == "south":
-            return self.has_north_door
-        elif direction == "east":
-            return self.has_west_door
-        elif direction == "west":
-            return self.has_east_door
-        else:
-            raise RuntimeError(
-                "unrecognized direction {direction} not one of north, south, east, west"
-            )
+    def has_door(self, direction: Direction) -> bool:
+        """Check if this template has a door in the given direction."""
+        door_checks = {
+            Direction.NORTH: self.has_north_door,
+            Direction.SOUTH: self.has_south_door,
+            Direction.EAST: self.has_east_door,
+            Direction.WEST: self.has_west_door,
+        }
+        return door_checks[direction]
+
+    def has_matching_door(self, direction: Direction) -> bool:
+        """Check if this template has a door that can connect to the given direction.
+
+        For example, if direction is NORTH (an existing room's north door),
+        this returns True if this template has a SOUTH door to connect to it.
+        """
+        return self.has_door(direction.opposite())
 
 
 # Pre-defined room templates
@@ -207,13 +238,13 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
     RoomTemplate(
         name="big-pillar",
         ascii_art=[
-             "1-----nN-----2",
+            "1-----nN-----2",
             "[............]",
             "w.....^!.....e",
             "W.....~,.....E",
             "[............]",
             "3_____sS_____4",
-        ]
+        ],
     ),
     RoomTemplate(
         name="small-pillars",
@@ -228,7 +259,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "[...P..P...]",
             "[..........]",
             "3____sS____4",
-        ]
+        ],
     ),
     RoomTemplate(
         name="east-west",
@@ -237,7 +268,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "w.......e",
             "W.......E",
             "3_______4",
-        ]
+        ],
     ),
     RoomTemplate(
         name="north-south",
@@ -250,7 +281,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "[..]",
             "[..]",
             "3sS4",
-        ]
+        ],
     ),
 ]
 
@@ -278,34 +309,26 @@ def _parse_ascii_room(
     return tiles
 
 
-# TODO: directions should be an enum rather than a
-# string
 def _get_door_position(
-    template: RoomTemplate, direction: str
+    template: RoomTemplate, direction: Direction
 ) -> Optional[Position]:
     """
     Get the tile position of a door slot in the template.
 
     Returns Position of the first door tile, or None if no door slot exists.
-    Direction: 'north', 'south', 'east', 'west'
     """
-
-    char_map = {
-        "north": "n",
-        "south": "s",
-        "east": "e",
-        "west": "w",
+    # Each direction has two door characters (e.g., 'n' and 'N' for north)
+    door_chars = {
+        Direction.NORTH: ("n", "N"),
+        Direction.SOUTH: ("s", "S"),
+        Direction.EAST: ("e", "E"),
+        Direction.WEST: ("w", "W"),
     }
-    target_char = char_map.get(direction)
-    if not target_char:
-        return None
+    target_chars = door_chars[direction]
 
     for row_idx, line in enumerate(template.ascii_art):
         for col_idx, char in enumerate(line):
-            # TODO: this char.lower() is hacky.
-            # instead, let's enumerate both
-            # characters.
-            if char.lower() == target_char:
+            if char in target_chars:
                 return Position(row=row_idx, column=col_idx)
 
     return None
@@ -346,8 +369,6 @@ def generate_foreground_from_dungeon(dungeon_map: DungeonMap) -> DungeonMap:
     return foreground
 
 
-# TODO: _place_room_on_canvas should happen at the end, when
-# all rooms have been places in theoretical space
 def _place_room_on_canvas(
     canvas: np.ndarray,
     template: RoomTemplate,
@@ -360,14 +381,8 @@ def _place_room_on_canvas(
             canvas[position.row + local_row, position.column + local_column] = tile
 
 
-def _opposite_direction(direction: str) -> str:
-    """Get the opposite direction."""
-    opposites = {"north": "south", "south": "north", "east": "west", "west": "east"}
-    return opposites[direction]
-
-
 def _calculate_room_placement(
-    direction: str, door_position: Position, new_template: RoomTemplate
+    direction: Direction, door_position: Position, new_template: RoomTemplate
 ) -> Position:
     """
     Calculate where a new room should be placed to connect to an existing door.
@@ -380,22 +395,13 @@ def _calculate_room_placement(
     Returns: Position where the new room's top-left corner should be placed
     """
 
-    # TODO: can we both of the new_template fit.
-    # To fit, new_template's complementary door
-    # should be in a matching position to door_position
+    target_step = direction.step()
+    target_door_offset = Position(
+        row=door_position.row + target_step.row,
+        column=door_position.column + target_step.column,
+    )
 
-    if direction == "north":
-        target_door_offset = Position(row=door_position.row - 1, column=door_position.column)
-    elif direction == "south":
-        target_door_offset = Position(row=door_position.row + 1, column=door_position.column)
-    elif direction == "east":
-        target_door_offset = Position(row=door_position.row, column=door_position.column + 1)
-    elif direction == "west":
-        target_door_offset = Position(row=door_position.row, column=door_position.column - 1)
-    else:
-        raise RuntimeError("unrecognized direction {direction}")
-
-    complimentary_direction = _opposite_direction(direction)
+    complimentary_direction = direction.opposite()
     complimentary_door = _get_door_position(new_template, complimentary_direction)
     if not complimentary_door:
         raise RuntimeError("cannot place room")
@@ -412,7 +418,10 @@ def _would_overlap(
     """Check if placing a room at the given position would overlap existing tiles."""
     for local_row in range(template.height):
         for local_column in range(template.width):
-            if canvas[position.row + local_row, position.column + local_column] != Tile.NOTHING:
+            if (
+                canvas[position.row + local_row, position.column + local_column]
+                != Tile.NOTHING
+            ):
                 return True
     return False
 
@@ -421,7 +430,7 @@ def _replace_blind_doors_with_walls(
     dungeon_map: np.ndarray,
     room_positions: Dict[int, Position],
     room_assignments: Dict[int, RoomTemplate],
-    connected_doors: Set[Tuple[int, str]],
+    connected_doors: Set[Tuple[int, Direction]],
 ) -> None:
     """
     Replace all unconnected door tiles with appropriate wall tiles.
@@ -446,19 +455,18 @@ def _replace_blind_doors_with_walls(
         template = room_assignments[room_id]
 
         # Check each direction
-        for direction in ["north", "south", "east", "west"]:
+        for direction in [
+            Direction.NORTH,
+            Direction.SOUTH,
+            Direction.EAST,
+            Direction.WEST,
+        ]:
             # Skip if this door was connected
             if (room_id, direction) in connected_doors:
                 continue
 
             # Skip if template doesn't have this door
-            direction_check = {
-                "north": template.has_north_door,
-                "south": template.has_south_door,
-                "east": template.has_east_door,
-                "west": template.has_west_door,
-            }
-            if not direction_check[direction]:
+            if not template.has_door(direction):
                 continue
 
             # Get door position in template
@@ -472,7 +480,7 @@ def _replace_blind_doors_with_walls(
 
             # Replace door tiles with walls
             # Each door has two tiles (e.g., NORTH_DOOR_WEST and NORTH_DOOR_EAST)
-            if direction in ["north", "south"]:
+            if direction in [Direction.NORTH, Direction.SOUTH]:
                 # North/South doors are two tiles wide
                 for col_offset in range(2):
                     tile = dungeon_map[door_row, door_col + col_offset]
@@ -549,8 +557,6 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     # We'll use a much larger canvas to avoid worrying about bounds initially
     # Estimate: each room ~12x10, each corridor ~8, max branches ~4 per room
     # Rough estimate: 30 rooms * (12 + 8) * 4 directions = ~2400 tiles per dimension
-    # TODO: We should create the canvas after we've built the map, we can
-    # figure out the size by looking at the sizes and position of the rooms.
     canvas_size = max(2000, target_num_rooms * 100)
 
     # Create empty canvas (we'll crop it later)
@@ -561,11 +567,10 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     room_assignments: Dict[int, RoomTemplate] = {}  # room_id -> RoomTemplate
 
     # Track open doors: list of (room_id, direction, door_position)
-    # direction: 'north', 'south', 'east', 'west'
-    open_doors: List[Tuple[int, str, Position]] = []
+    open_doors: List[Tuple[int, Direction, Position]] = []
 
     # Track connected doors: set of (room_id, direction) that were successfully connected
-    connected_doors: Set[Tuple[int, str]] = set()
+    connected_doors: Set[Tuple[int, Direction]] = set()
 
     # Start with first room at center of canvas
     start_room_id = 0
@@ -583,7 +588,7 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     )
 
     # Add all doors from the start room to the open doors queue
-    for direction in ["north", "south", "east", "west"]:
+    for direction in [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]:
         door_pos = _get_door_position(start_template, direction)
         if door_pos:
             open_doors.append(
@@ -626,7 +631,9 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
                 direction, door_position, possible_template
             )
 
-            if not _would_overlap(dungeon_map, possible_template, possible_room_position):
+            if not _would_overlap(
+                dungeon_map, possible_template, possible_room_position
+            ):
                 new_room_position = possible_room_position
                 new_template = possible_template
                 # This placement will work!
@@ -648,13 +655,13 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
         room_positions[next_room_id] = new_room_position
         room_assignments[next_room_id] = new_template
 
-        # Mark the new room's connection door as connected
-        # TODO: this seems a little hacky, since we're making assumptions
-        # about _calculate_room_placement here
-        connected_doors.add((next_room_id, _opposite_direction(direction)))
+        # Mark the new room's connection door as connected.
+        # The new room connects via its opposite-facing door (e.g., if we placed
+        # a room to the north, it connects via its south door).
+        connected_doors.add((next_room_id, direction.opposite()))
 
         # Add new room's open doors to the queue (except the one we just connected)
-        for new_direction in ["north", "south", "east", "west"]:
+        for new_direction in [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]:
             if (next_room_id, new_direction) in connected_doors:
                 continue  # This door is already connected
 
@@ -699,12 +706,24 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
         )
 
     # Calculate start position in pixels
-    start_pos = room_positions_adjusted[start_room_id]
+    start_room_pos = room_positions_adjusted[start_room_id]
     start_template = room_assignments[start_room_id]
-    start_pos_pixel = (
-        (start_pos.column + start_template.width // 2) * 64,
-        (start_pos.row + start_template.height // 2) * 64,
-    )
+    start_pos = Position(start_room_pos.row + start_template.height // 2,
+                         start_room_pos.column + start_template.width // 2)
+   
+    # Always start on a FLOOR tile
+    # TODO: this search for a FLOOR tile should be improved,
+    # we can build dungeons where it'll never find a floor.
+    for _ in range(1000):
+        if dungeon_map[start_pos.row, start_pos.column] == Tile.FLOOR:
+            break
+        
+        start_pos = Position(start_pos.row, start_pos.column + 1)
+    else:
+        raise RuntimeError("Failed to find a FLOOR tile for start position")
+
+
+    start_pos_pixel = (start_pos.column * 64, start_pos.row * 64)
 
     # Convert room_ids to (row, col) format for compatibility
     # We'll just assign sequential grid positions
