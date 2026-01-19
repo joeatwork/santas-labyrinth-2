@@ -45,16 +45,90 @@ class Content(ABC):
         return False
 
 class TitleCard(Content):
-    def __init__(self, image_path: str, asset_manager: AssetManager):
+    # TODO: get rid of the optional argument and always require audio, reorder the arguments to a more natural order
+    def __init__(self, image_path: str, asset_manager: AssetManager, audio_path: Optional[str] = None):
         self.image_path = image_path
+        self.audio_path = audio_path
         self.image = cv2.imread(image_path)
         if self.image is None:
             # Fallback to black if missing
             print(f"Warning: Could not load title card {image_path}", file=sys.stderr)
             self.image = None
-        
+
+        # Audio state
+        self.audio_container: Optional[av.container.InputContainer] = None
+        self.audio_stream: Optional[av.stream.Stream] = None
+        self.audio_resampler: Optional[av.audio.resampler.AudioResampler] = None
+        self.audio_buffer: np.ndarray = np.zeros((0, 2), dtype=np.int16)
+        self.audio_sample_rate: int = 44100
+        self.audio_finished: bool = False
+
     def enter(self) -> None:
-        pass
+        # Reset audio state
+        self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
+        self.audio_finished = False
+
+        if self.audio_container is not None:
+            self.audio_container.close()
+            self.audio_container = None
+
+        if self.audio_path is None:
+            return
+
+        try:
+            self.audio_container = av.open(self.audio_path)
+        except Exception as e:
+            print(f"Error: Could not open audio {self.audio_path}: {e}", file=sys.stderr)
+            self.audio_finished = True
+            return
+
+        # Get audio stream
+        audio_streams = [s for s in self.audio_container.streams if s.type == 'audio']
+        if audio_streams:
+            self.audio_stream = audio_streams[0]
+            # Create resampler to convert to output format (44100Hz stereo s16 planar)
+            self.audio_resampler = av.audio.resampler.AudioResampler(
+                format='s16p',
+                layout='stereo',
+                rate=self.audio_sample_rate,
+            )
+            print(f"TitleCard audio: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
+        else:
+            print(f"Warning: No audio stream in {self.audio_path}", file=sys.stderr)
+            self.audio_stream = None
+            self.audio_resampler = None
+            self.audio_finished = True
+
+    def _decode_audio(self) -> bool:
+        """Decode more audio into the buffer. Returns False if EOF reached."""
+        if self.audio_container is None or self.audio_stream is None or self.audio_resampler is None:
+            return False
+
+        try:
+            for packet in self.audio_container.demux(self.audio_stream):
+                for frame in packet.decode():
+                    resampled = self.audio_resampler.resample(frame)
+                    if resampled:
+                        for rf in resampled:
+                            arr = rf.to_ndarray()
+                            arr = arr.T  # (channels, samples) -> (samples, channels)
+                            self.audio_buffer = np.vstack([self.audio_buffer, arr])
+                return True  # Got some audio
+        except av.error.EOFError:
+            # Flush the resampler
+            try:
+                resampled = self.audio_resampler.resample(None)
+                if resampled:
+                    for rf in resampled:
+                        arr = rf.to_ndarray()
+                        arr = arr.T
+                        self.audio_buffer = np.vstack([self.audio_buffer, arr])
+            except:
+                pass
+            return False
+        except Exception as e:
+            print(f"Error decoding audio: {e}", file=sys.stderr)
+            return False
 
     def update(self, dt: float) -> None:
         pass
@@ -62,9 +136,41 @@ class TitleCard(Content):
     def render(self, width: int, height: int) -> Image:
         if self.image is None:
              return np.zeros((height, width, 3), np.uint8)
-        
+
         # Resize to fit stream dimensions
         return cv2.resize(self.image, (width, height))
+
+    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+        """Return audio samples for this frame."""
+        if self.audio_path is None or self.audio_finished:
+            return None
+
+        # Decode more audio if buffer is running low
+        while len(self.audio_buffer) < num_samples and not self.audio_finished:
+            if not self._decode_audio():
+                self.audio_finished = True
+                break
+
+        if len(self.audio_buffer) == 0:
+            return None
+
+        if len(self.audio_buffer) < num_samples:
+            # Return what we have padded with silence (final chunk)
+            result = np.zeros((num_samples, channels), dtype=np.int16)
+            result[:len(self.audio_buffer)] = self.audio_buffer[:, :channels]
+            self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
+            return result
+
+        # Return requested samples and keep the rest buffered
+        result = self.audio_buffer[:num_samples, :channels].copy()
+        self.audio_buffer = self.audio_buffer[num_samples:]
+        return result
+
+    def is_complete(self) -> bool:
+        """Complete when audio finishes (if audio was provided)."""
+        if self.audio_path is None:
+            return False  # No audio, rely on duration
+        return self.audio_finished and len(self.audio_buffer) == 0
 
 class DungeonWalk(Content):
     def __init__(self, map_width_rooms: int, map_height_rooms: int, assets: AssetManager):

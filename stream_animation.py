@@ -53,15 +53,21 @@ def main():
     # Initialize Stream Loop
     video_program = VideoProgram()
     
-    video_files = glob.glob(os.path.join('large_media', '*.mp4'))
-    random.shuffle(video_files)
+    movie_videos = glob.glob(os.path.join('large_media', '*.mp4'))
+    random.shuffle(movie_videos)
 
-    for video_path in video_files:
-        title_path = title_cards.pop(0)
-        title_cards.append(title_path)  # Rotate title cards
+    title_card_songs = glob.glob(os.path.join('large_audio', '*.mp3'))
+    random.shuffle(title_card_songs)
+
+    for video_path in movie_videos:
+        title_image = title_cards.pop(0)
+        title_cards.append(title_image)  # Rotate title cards
         
+        title_audio = title_card_songs.pop(0)
+        title_card_songs.append(title_audio)  # Rotate title audios
+
         # TODO: renable title card and video clip once we've validated that dungeonwalk is working
-        video_program.add_content(TitleCard(title_path, assets), 10.0)
+        video_program.add_content(TitleCard(title_image, assets, title_audio), 30.0)
         video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 120.0)
         video_program.add_content(VideoClip(video_path, 30, output_fps=args.fps), 20.0)
      
