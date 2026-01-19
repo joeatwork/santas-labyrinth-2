@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 
 from dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
 from world import Hero, Dungeon, TILE_SIZE
@@ -46,6 +46,17 @@ class MockDungeon:
         # Corridor tiles are mapped to an adjacent room for pathfinding purposes
         self._tile_to_room[(tile_row, tile_col)] = adjacent_room
 
+    def add_pillar(self, tile_row: int, tile_col: int) -> None:
+        """Place a single pillar obstacle at the given tile."""
+        self.map[tile_row, tile_col] = Tile.PILLAR
+
+    def add_big_pillar(self, tile_row: int, tile_col: int) -> None:
+        """Place a 2x2 convex corner block (big pillar) with top-left at given tile."""
+        self.map[tile_row, tile_col] = Tile.NW_CONVEX_CORNER
+        self.map[tile_row, tile_col + 1] = Tile.NE_CONVEX_CORNER
+        self.map[tile_row + 1, tile_col] = Tile.SW_CONVEX_CORNER
+        self.map[tile_row + 1, tile_col + 1] = Tile.SE_CONVEX_CORNER
+
     def add_door(self, room_row: int, room_col: int, direction: int) -> None:
         """
         Add a door to a room by placing door tiles.
@@ -69,23 +80,31 @@ class MockDungeon:
         else:
             raise ValueError(f"Invalid direction: {direction}")
 
+    # Tiles that can be walked on (matches Dungeon.WALKABLE_TILES)
+    WALKABLE_TILES = (
+        Tile.FLOOR,
+        Tile.GOAL,
+        Tile.NORTH_DOOR_WEST,
+        Tile.NORTH_DOOR_EAST,
+        Tile.SOUTH_DOOR_WEST,
+        Tile.SOUTH_DOOR_EAST,
+        Tile.WEST_DOOR_NORTH,
+        Tile.WEST_DOOR_SOUTH,
+        Tile.EAST_DOOR_NORTH,
+        Tile.EAST_DOOR_SOUTH,
+    )
+
     def is_walkable(self, x: float, y: float) -> bool:
+        """Check if a pixel position is walkable."""
         col = int(x / TILE_SIZE)
         row = int(y / TILE_SIZE)
+        return self.is_tile_walkable(row, col)
+
+    def is_tile_walkable(self, row: int, col: int) -> bool:
+        """Check if a tile at (row, col) is walkable."""
         if 0 <= row < self.rows and 0 <= col < self.cols:
             tile = self.map[row, col]
-            return tile in (
-                Tile.FLOOR,
-                Tile.GOAL,
-                Tile.NORTH_DOOR_WEST,
-                Tile.NORTH_DOOR_EAST,
-                Tile.SOUTH_DOOR_WEST,
-                Tile.SOUTH_DOOR_EAST,
-                Tile.WEST_DOOR_NORTH,
-                Tile.WEST_DOOR_SOUTH,
-                Tile.EAST_DOOR_NORTH,
-                Tile.EAST_DOOR_SOUTH,
-            )
+            return tile in self.WALKABLE_TILES
         return False
 
     def get_room_coords(self, x: float, y: float) -> Tuple[int, int]:
@@ -630,3 +649,94 @@ class TestHeroCorridorNavigation:
         # Verify hero reached the southern room
         final_hero_row = int(hero.y / TILE_SIZE)
         assert final_hero_row >= room1_start_row, f"Hero should have reached the southern room (row {final_hero_row} >= {room1_start_row})"
+
+
+class TestHeroNavigatesAroundObstacles:
+    """Test that hero uses BFS pathfinding to navigate around obstacles."""
+
+    def test_hero_navigates_around_pillar(self):
+        """Hero finds path around single pillar to reach goal."""
+        dungeon = MockDungeon(1, 1)
+
+        # Place pillar directly between hero start and goal
+        # Hero at col 3, goal at col 8, pillar at col 5
+        hero_row, hero_col = 5, 3
+        goal_row, goal_col = 5, 8
+        pillar_col = 5
+
+        dungeon.add_pillar(hero_row, pillar_col)
+        dungeon.set_goal(goal_row, goal_col)
+
+        x, y = tile_center(hero_row, hero_col)
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+
+        # Simulate movement until hero reaches goal or max iterations
+        max_iterations = 100
+        for _ in range(max_iterations):
+            if hero.state == 'idle':
+                hero.decide_next_move(dungeon)
+            hero.move(0.1)
+
+            # Check if reached goal
+            if int(hero.x / TILE_SIZE) == goal_col and int(hero.y / TILE_SIZE) == goal_row:
+                break
+
+        # Verify hero reached the goal
+        final_col = int(hero.x / TILE_SIZE)
+        final_row = int(hero.y / TILE_SIZE)
+        assert final_col == goal_col and final_row == goal_row, \
+            f"Hero should reach goal at ({goal_row}, {goal_col}), but is at ({final_row}, {final_col})"
+
+    def test_hero_navigates_around_big_pillar(self):
+        """Hero finds path around 2x2 convex corner block."""
+        dungeon = MockDungeon(1, 1)
+
+        # Place big pillar (2x2) between hero and goal
+        hero_row, hero_col = 5, 2
+        goal_row, goal_col = 5, 9
+
+        # Big pillar at rows 4-5, cols 5-6 (blocking direct east path)
+        dungeon.add_big_pillar(4, 5)
+        dungeon.set_goal(goal_row, goal_col)
+
+        x, y = tile_center(hero_row, hero_col)
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+
+        # Simulate movement
+        max_iterations = 150
+        for _ in range(max_iterations):
+            if hero.state == 'idle':
+                hero.decide_next_move(dungeon)
+            hero.move(0.1)
+
+            # Check if reached goal
+            if int(hero.x / TILE_SIZE) == goal_col and int(hero.y / TILE_SIZE) == goal_row:
+                break
+
+        # Verify hero reached the goal
+        final_col = int(hero.x / TILE_SIZE)
+        final_row = int(hero.y / TILE_SIZE)
+        assert final_col == goal_col and final_row == goal_row, \
+            f"Hero should reach goal at ({goal_row}, {goal_col}), but is at ({final_row}, {final_col})"
+
+    def test_hero_path_avoids_obstacle(self):
+        """Verify the computed path does not include obstacle tiles."""
+        dungeon = MockDungeon(1, 1)
+
+        hero_row, hero_col = 5, 3
+        goal_row, goal_col = 5, 8
+        pillar_row, pillar_col = 5, 5
+
+        dungeon.add_pillar(pillar_row, pillar_col)
+        dungeon.set_goal(goal_row, goal_col)
+
+        x, y = tile_center(hero_row, hero_col)
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+
+        # Trigger path computation
+        hero.decide_next_move(dungeon)
+
+        # Check that the computed path does not include the pillar
+        assert hero.current_path is not None, "Hero should have computed a path"
+        assert (pillar_row, pillar_col) not in hero.current_path, \
+            "Path should not include the pillar tile"

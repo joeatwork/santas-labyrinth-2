@@ -27,6 +27,28 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     
     # Floor (death_mountain)
     'floor': {'x': 64, 'y': 64, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    
+    # Door flooring
+    "north_door_floor": {'x': 192, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    "south_door_floor": {'x': 128, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    "west_door_floor": {'x': 640, 'y': 120, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    "east_door_floor": {'x': 640, 'y': 192, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+
+    # Pillar
+    'pillar': {'x': 0, 'y': 704, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+
+    # Convex corners (inner corners for room intersections)
+    'convex_nw': {'x': 128, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'convex_ne': {'x': 256, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'convex_sw': {'x': 128, 'y': 256, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'convex_se': {'x': 256, 'y': 256, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+
+    # Decorative north walls (variety of north wall styles)
+    'decorative_north_wall_0': {'x': 64, 'y': 768, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'decorative_north_wall_1': {'x': 128, 'y': 768, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'decorative_north_wall_2': {'x': 192, 'y': 768, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'decorative_north_wall_3': {'x': 256, 'y': 768, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    'decorative_north_wall_4': {'x': 64, 'y': 832, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
 
     # Goal
     'goal': {'x': 0, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/red_heart.png'},
@@ -79,16 +101,22 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.NE_CORNER: 'wall_ne_corner',
     Tile.SW_CORNER: 'wall_sw_corner',
     Tile.SE_CORNER: 'wall_se_corner',
+    Tile.PILLAR: 'pillar',
+    Tile.NW_CONVEX_CORNER: 'convex_nw',
+    Tile.NE_CONVEX_CORNER: 'convex_ne',
+    Tile.SW_CONVEX_CORNER: 'convex_sw',
+    Tile.SE_CONVEX_CORNER: 'convex_se',
+    Tile.DECORATIVE_NORTH_WALL: 'decorative_north_wall_0',
     Tile.GOAL: 'goal',
     # Door tiles render as floor
-    Tile.NORTH_DOOR_WEST: 'floor',
-    Tile.NORTH_DOOR_EAST: 'floor',
-    Tile.SOUTH_DOOR_WEST: 'floor',
-    Tile.SOUTH_DOOR_EAST: 'floor',
-    Tile.WEST_DOOR_NORTH: 'floor',
-    Tile.WEST_DOOR_SOUTH: 'floor',
-    Tile.EAST_DOOR_NORTH: 'floor',
-    Tile.EAST_DOOR_SOUTH: 'floor',
+    Tile.NORTH_DOOR_WEST: 'north_door_floor',
+    Tile.NORTH_DOOR_EAST: 'north_door_floor',
+    Tile.SOUTH_DOOR_WEST: 'south_door_floor',
+    Tile.SOUTH_DOOR_EAST: 'south_door_floor',
+    Tile.WEST_DOOR_NORTH: 'west_door_floor',
+    Tile.WEST_DOOR_SOUTH: 'west_door_floor',
+    Tile.EAST_DOOR_NORTH: 'east_door_floor',
+    Tile.EAST_DOOR_SOUTH: 'east_door_floor',
     Tile.NOTHING: None
 }
 

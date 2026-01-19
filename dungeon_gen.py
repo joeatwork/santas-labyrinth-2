@@ -41,6 +41,14 @@ class Tile:
     SW_CORNER: int = 16
     SE_CORNER: int = 17
 
+    PILLAR: int = 50
+    NW_CONVEX_CORNER: int = 51
+    NE_CONVEX_CORNER: int = 52
+    SW_CONVEX_CORNER: int = 53
+    SE_CONVEX_CORNER: int = 54
+
+    DECORATIVE_NORTH_WALL: int = 60
+
     # Doors (each direction has two tiles - west/east or north/south halves)
     NORTH_DOOR_WEST: int = 20
     NORTH_DOOR_EAST: int = 21
@@ -77,10 +85,16 @@ ASCII_TO_TILE: Dict[str, int] = {
     "_": Tile.SOUTH_WALL,
     "[": Tile.WEST_WALL,
     "]": Tile.EAST_WALL,
+    "=": Tile.DECORATIVE_NORTH_WALL,
     "1": Tile.NW_CORNER,
     "2": Tile.NE_CORNER,
     "3": Tile.SW_CORNER,
     "4": Tile.SE_CORNER,
+    "P": Tile.PILLAR,
+    "^": Tile.NW_CONVEX_CORNER,
+    "!": Tile.NE_CONVEX_CORNER,
+    "~": Tile.SW_CONVEX_CORNER,
+    ",": Tile.SE_CONVEX_CORNER,
     "n": Tile.NORTH_DOOR_WEST,
     "N": Tile.NORTH_DOOR_EAST,
     "s": Tile.SOUTH_DOOR_WEST,
@@ -180,29 +194,57 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
         ],
     ),
     RoomTemplate(
-        name="small",
+        name="wide",
         ascii_art=[
-            "1-nN-2",
-            "[....]",
-            "w....e",
-            "W....E",
-            "[....]",
-            "3_sS_4",
+            "1-----nN-----2",
+            "[............]",
+            "w............e",
+            "W............E",
+            "[............]",
+            "3_____sS_____4",
         ],
+    ),
+    RoomTemplate(
+        name="big-pillar",
+        ascii_art=[
+             "1-----nN-----2",
+            "[............]",
+            "w.....^!.....e",
+            "W.....~,.....E",
+            "[............]",
+            "3_____sS_____4",
+        ]
+    ),
+    RoomTemplate(
+        name="small-pillars",
+        ascii_art=[
+            "1----nN----2",
+            "[..........]",
+            "[...P..P...]",
+            "[..........]",
+            "w..........e",
+            "W..........E",
+            "[..........]",
+            "[...P..P...]",
+            "[..........]",
+            "3____sS____4",
+        ]
     ),
     RoomTemplate(
         name="east-west",
         ascii_art=[
-            "1----2",
-            "w....e",
-            "W....E",
-            "3____4",
+            "1---=---2",
+            "w.......e",
+            "W.......E",
+            "3_______4",
         ]
     ),
     RoomTemplate(
         name="north-south",
         ascii_art=[
             "1nN2",
+            "[..]",
+            "[..]",
             "[..]",
             "[..]",
             "[..]",
@@ -495,6 +537,9 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
         room_positions: Dict mapping room_id to (tile_x, tile_y) position
         room_assignments: Dict mapping room_id to RoomTemplate used
     """
+    # TODO: ensure that the start position returned from this function is always
+    # a walkable tile.
+
     # TODO: update this signature to take a single "num_rooms" argument
     # rather than a width and height. Update the return value to identify
     # rooms with a single id rather than a (row, column) pair
