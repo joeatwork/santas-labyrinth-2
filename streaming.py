@@ -42,6 +42,12 @@ class FFmpegStreamer:
         # Build ffmpeg command to read NUT from stdin and output FLV
         cmd = [
             "ffmpeg",
+            
+            # We write to the ffmpeg process as fast as we can,
+            # and the -re flag ensures we don't overwhelm client buffers
+            # by getting too far ahead.
+            "-re",
+
             "-y",
             "-f", "nut",
             "-i", "pipe:0",
