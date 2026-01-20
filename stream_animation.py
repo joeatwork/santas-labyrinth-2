@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--height', type=int, default=720)
     parser.add_argument('--fps', type=int, default=30)
     parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducibility')
-    parser.add_argument('--num-rooms', type=int, default=30, help='Number of rooms in dungeon')
+    parser.add_argument('--num-rooms', type=int, default=24, help='Number of rooms in dungeon')
     args = parser.parse_args()
 
     # Set random seed if specif__d
