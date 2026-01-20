@@ -106,7 +106,10 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.NE_CONVEX_CORNER: 'convex_ne',
     Tile.SW_CONVEX_CORNER: 'convex_sw',
     Tile.SE_CONVEX_CORNER: 'convex_se',
-    Tile.DECORATIVE_NORTH_WALL: 'decorative_north_wall_0',
+    Tile.DECORATIVE_NORTH_WALL_0: 'decorative_north_wall_0',
+    Tile.DECORATIVE_NORTH_WALL_1: 'decorative_north_wall_1',
+    Tile.DECORATIVE_NORTH_WALL_2: 'decorative_north_wall_2',
+    Tile.DECORATIVE_NORTH_WALL_3: 'decorative_north_wall_3',
     Tile.GOAL: 'goal',
     # Door tiles render as floor
     Tile.NORTH_DOOR_WEST: 'north_door_floor',

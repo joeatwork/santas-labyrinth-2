@@ -156,9 +156,6 @@ class Hero:
 
         # Navigation state
         self.last_door_direction: Optional[int] = None  # Direction of last door passed through
-        self.current_room: Optional[Tuple[int, int]] = None
-        self.selected_door: Optional[Tuple[int, float, float]] = None  # (direction, x, y)
-        self.entry_door_direction: Optional[int] = None  # Direction of door we entered through
 
         # BFS pathfinding state
         self.current_path: Optional[List[Tuple[int, int]]] = None  # List of (row, col) tiles

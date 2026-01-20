@@ -46,9 +46,10 @@ class Content(ABC):
 
 class TitleCard(Content):
     # TODO: get rid of the optional argument and always require audio, reorder the arguments to a more natural order
-    def __init__(self, image_path: str, asset_manager: AssetManager, audio_path: Optional[str] = None):
+    def __init__(self, image_path: str, asset_manager: AssetManager, audio_path: Optional[str] = None, volume: float = 1.0):
         self.image_path = image_path
         self.audio_path = audio_path
+        self.volume = volume
         self.image = cv2.imread(image_path)
         if self.image is None:
             # Fallback to black if missing
@@ -159,11 +160,15 @@ class TitleCard(Content):
             result = np.zeros((num_samples, channels), dtype=np.int16)
             result[:len(self.audio_buffer)] = self.audio_buffer[:, :channels]
             self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
-            return result
+        else:
+            # Return requested samples and keep the rest buffered
+            result = self.audio_buffer[:num_samples, :channels].copy()
+            self.audio_buffer = self.audio_buffer[num_samples:]
 
-        # Return requested samples and keep the rest buffered
-        result = self.audio_buffer[:num_samples, :channels].copy()
-        self.audio_buffer = self.audio_buffer[num_samples:]
+        # Apply volume scaling
+        if self.volume != 1.0:
+            result = (result.astype(np.float32) * self.volume).astype(np.int16)
+
         return result
 
     def is_complete(self) -> bool:

@@ -6,7 +6,13 @@ import random
 from typing import Set, Tuple, List, Deque, Optional
 from collections import deque
 
-from dungeon_gen import generate_dungeon, Tile
+from dungeon_gen import (
+    generate_dungeon,
+    Tile,
+    find_floor_tile_in_room,
+    Position,
+    RoomTemplate,
+)
 
 
 def get_walkable_tiles(dungeon_map: np.ndarray) -> Set[Tuple[int, int]]:
@@ -340,5 +346,61 @@ class TestNoBlindDoors:
 
         assert len(blind_doors) == 0, \
             f"{width}x{height} dungeon: Found {len(blind_doors)} blind doors at positions: {blind_doors}"
+
+
+class TestFindFloorTileInRoom:
+    """Test that find_floor_tile_in_room correctly finds floor tiles in rooms with obstructed centers."""
+
+    def test_finds_floor_when_center_is_obstructed(self):
+        """A room with a pillar at center should still find a nearby floor tile."""
+        from dungeon_gen import ASCII_TO_TILE
+
+        template = RoomTemplate(
+            name="test-obstructed",
+            ascii_art=[
+                "1--2",
+                "[P.]",
+                "[..]",
+                "3__4",
+            ],
+        )
+        dungeon_map = np.zeros((10, 10), dtype=int)
+        room_pos = Position(row=2, column=2)
+
+        for local_row, line in enumerate(template.ascii_art):
+            for local_col, char in enumerate(line):
+                dungeon_map[room_pos.row + local_row, room_pos.column + local_col] = ASCII_TO_TILE[char]
+
+        result = find_floor_tile_in_room(dungeon_map, room_pos, template)
+
+        assert dungeon_map[result.row, result.column] == Tile.FLOOR, \
+            f"Expected FLOOR tile at {result}, got {dungeon_map[result.row, result.column]}"
+
+    def test_finds_floor_in_big_pillar_room(self):
+        """The big-pillar room template has a 2x2 pillar at center; should find floor nearby."""
+        from dungeon_gen import ASCII_TO_TILE
+
+        template = RoomTemplate(
+            name="big-pillar",
+            ascii_art=[
+                "1-----nN-----2",
+                "[............]",
+                "w.....^!.....e",
+                "W.....~,.....E",
+                "[............]",
+                "3_____sS_____4",
+            ],
+        )
+        dungeon_map = np.zeros((20, 30), dtype=int)
+        room_pos = Position(row=5, column=5)
+
+        for local_row, line in enumerate(template.ascii_art):
+            for local_col, char in enumerate(line):
+                dungeon_map[room_pos.row + local_row, room_pos.column + local_col] = ASCII_TO_TILE[char]
+
+        result = find_floor_tile_in_room(dungeon_map, room_pos, template)
+
+        assert dungeon_map[result.row, result.column] == Tile.FLOOR, \
+            f"Expected FLOOR tile at {result}, got {dungeon_map[result.row, result.column]}"
 
 

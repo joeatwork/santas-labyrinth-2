@@ -67,7 +67,7 @@ def main():
         title_card_songs.append(title_audio)  # Rotate title audios
 
         # TODO: renable title card and video clip once we've validated that dungeonwalk is working
-        video_program.add_content(TitleCard(title_image, assets, title_audio), 30.0)
+        video_program.add_content(TitleCard(title_image, assets, title_audio, volume=0.2), 30.0)
         video_program.add_content(DungeonWalk(args.map_width, args.map_height, assets), 120.0)
         video_program.add_content(VideoClip(video_path, 30, output_fps=args.fps), 20.0)
      

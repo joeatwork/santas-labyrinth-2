@@ -34,7 +34,7 @@ TILE_TO_ASCII = {
     Tile.NE_CONVEX_CORNER: "!",
     Tile.SW_CONVEX_CORNER: "~",
     Tile.SE_CONVEX_CORNER: ",",
-    Tile.DECORATIVE_NORTH_WALL: "=",
+    Tile.DECORATIVE_NORTH_WALL_0: "=",
     Tile.NORTH_DOOR_WEST: "n",
     Tile.NORTH_DOOR_EAST: "N",
     Tile.SOUTH_DOOR_WEST: "s",

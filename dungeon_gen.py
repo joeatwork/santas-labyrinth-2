@@ -45,7 +45,10 @@ class Tile:
     SW_CONVEX_CORNER: int = 53
     SE_CONVEX_CORNER: int = 54
 
-    DECORATIVE_NORTH_WALL: int = 60
+    DECORATIVE_NORTH_WALL_0: int = 60
+    DECORATIVE_NORTH_WALL_1: int = 61
+    DECORATIVE_NORTH_WALL_2: int = 62
+    DECORATIVE_NORTH_WALL_3: int = 63
 
     # Doors (each direction has two tiles - west/east or north/south halves)
     NORTH_DOOR_WEST: int = 20
@@ -83,7 +86,10 @@ ASCII_TO_TILE: Dict[str, int] = {
     "_": Tile.SOUTH_WALL,
     "[": Tile.WEST_WALL,
     "]": Tile.EAST_WALL,
-    "=": Tile.DECORATIVE_NORTH_WALL,
+    "=": Tile.DECORATIVE_NORTH_WALL_0,
+    "#": Tile.DECORATIVE_NORTH_WALL_1,
+    "+": Tile.DECORATIVE_NORTH_WALL_2,
+    "*": Tile.DECORATIVE_NORTH_WALL_3,
     "1": Tile.NW_CORNER,
     "2": Tile.NE_CORNER,
     "3": Tile.SW_CORNER,
@@ -216,11 +222,11 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
         ascii_art=[
             "1--nN--2",
             "[......]",
-            "[......]",
+            "[.P....]",
             "w......e",
             "W......E",
             "[......]",
-            "[......]",
+            "[....P.]",
             "3__sS__4",
         ],
     ),
@@ -264,7 +270,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
     RoomTemplate(
         name="east-west",
         ascii_art=[
-            "1---=---2",
+            "1---*---2",
             "w.......e",
             "W.......E",
             "3_______4",
@@ -283,6 +289,45 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "3sS4",
         ],
     ),
+    RoomTemplate(
+        name="diamond",
+        ascii_art=[
+            "  1-nN-2  ",
+            " 1,....~2 ",
+            "1,......~2",
+            "w........e",
+            "W........E",
+            "3!......^4",
+            " 3!....^4 ",
+            "  3_sS_4  ",
+        ]
+    ),
+    RoomTemplate(
+        name="big-el",
+        ascii_art=[
+            "1-nN-2",
+            "[....]",
+            "[....]",
+            "[....]",
+            "[....~------2",
+            "[...........e",
+            "[...........E",
+            "3___________4",
+        ],
+    ),
+    RoomTemplate(
+        name="big-jay",
+        ascii_art=[
+            "       1-nN-2",
+            "       [....]",
+            "       [....]",
+            "       [....]",
+            "1------,....]",
+            "w...........]",
+            "W...........]",
+            "3___________4",
+        ],
+    ) 
 ]
 
 
@@ -488,6 +533,14 @@ def _replace_blind_doors_with_walls(
                         dungeon_map[door_row, door_col + col_offset] = door_to_wall[
                             tile
                         ]
+
+                    # A little extra potential spice if it's a north wall
+                    if tile == Tile.NORTH_DOOR_WEST:
+                        dungeon_map[door_row, door_col + col_offset] = random.choice([
+                            Tile.DECORATIVE_NORTH_WALL_0,
+                            Tile.DECORATIVE_NORTH_WALL_1,
+                            Tile.DECORATIVE_NORTH_WALL_2,
+                        ])
             else:
                 # East/West doors are two tiles tall
                 for row_offset in range(2):
@@ -496,6 +549,51 @@ def _replace_blind_doors_with_walls(
                         dungeon_map[door_row + row_offset, door_col] = door_to_wall[
                             tile
                         ]
+
+
+def find_floor_tile_in_room(
+    dungeon_map: np.ndarray,
+    room_pos: Position,
+    template: RoomTemplate,
+) -> Position:
+    """
+    Find a FLOOR tile within a room, preferring tiles near the center.
+
+    Searches in a spiral pattern starting from the room's center.
+
+    Args:
+        dungeon_map: The dungeon tile array
+        room_pos: Position of the room's top-left corner
+        template: The room's template (for dimensions)
+
+    Returns:
+        Position of a FLOOR tile within the room
+
+    Raises:
+        RuntimeError: If no FLOOR tile is found in the room
+    """
+    center_row = room_pos.row + template.height // 2
+    center_col = room_pos.column + template.width // 2
+
+    # Check center first
+    if dungeon_map[center_row, center_col] == Tile.FLOOR:
+        return Position(row=center_row, column=center_col)
+
+    # Spiral outward from center
+    for offset in range(1, max(template.height, template.width)):
+        for dr in range(-offset, offset + 1):
+            for dc in range(-offset, offset + 1):
+                if abs(dr) != offset and abs(dc) != offset:
+                    continue  # Only check the perimeter of current offset
+                row = center_row + dr
+                col = center_col + dc
+                # Ensure we're within the room bounds
+                if (room_pos.row <= row < room_pos.row + template.height and
+                    room_pos.column <= col < room_pos.column + template.width):
+                    if dungeon_map[row, col] == Tile.FLOOR:
+                        return Position(row=row, column=col)
+
+    raise RuntimeError("Failed to find a FLOOR tile in room")
 
 
 def _crop_dungeon_map(dungeon_map: np.ndarray) -> Tuple[np.ndarray, Position]:
@@ -681,13 +779,12 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
         last_room_id = next_room_id
         next_room_id += 1
 
-    # Place goal in the last room added
+    # Place goal in the last room added, ensuring it's on a FLOOR tile
     goal_room_id = last_room_id
     goal_pos = room_positions[goal_room_id]
     goal_template = room_assignments[goal_room_id]
-    goal_row = goal_pos.row + goal_template.height // 2
-    goal_col = goal_pos.column + goal_template.width // 2
-    dungeon_map[goal_row, goal_col] = Tile.GOAL
+    goal_floor_pos = find_floor_tile_in_room(dungeon_map, goal_pos, goal_template)
+    dungeon_map[goal_floor_pos.row, goal_floor_pos.column] = Tile.GOAL
 
     # Replace all unconnected doors with walls
     _replace_blind_doors_with_walls(
@@ -708,21 +805,7 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     # Calculate start position in pixels
     start_room_pos = room_positions_adjusted[start_room_id]
     start_template = room_assignments[start_room_id]
-    start_pos = Position(start_room_pos.row + start_template.height // 2,
-                         start_room_pos.column + start_template.width // 2)
-   
-    # Always start on a FLOOR tile
-    # TODO: this search for a FLOOR tile should be improved,
-    # we can build dungeons where it'll never find a floor.
-    for _ in range(1000):
-        if dungeon_map[start_pos.row, start_pos.column] == Tile.FLOOR:
-            break
-        
-        start_pos = Position(start_pos.row, start_pos.column + 1)
-    else:
-        raise RuntimeError("Failed to find a FLOOR tile for start position")
-
-
+    start_pos = find_floor_tile_in_room(dungeon_map, start_room_pos, start_template)
     start_pos_pixel = (start_pos.column * 64, start_pos.row * 64)
 
     # Convert room_ids to (row, col) format for compatibility

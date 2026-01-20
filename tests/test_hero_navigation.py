@@ -246,50 +246,6 @@ class TestHeroApproachesGoal:
 class TestHeroNavigatesToDoor:
     """Test that hero navigates toward doors when goal is in another room."""
 
-    def test_hero_selects_door_when_goal_in_other_room(self):
-        dungeon = MockDungeon(2, 1)
-
-        # Goal in room (0, 1)
-        goal_row = 5
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(goal_row, goal_col)
-
-        # Add east door to room (0, 0)
-        dungeon.add_door(0, 0, 0)  # East door
-
-        # Hero in room (0, 0)
-        x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        hero.decide_next_move(dungeon)
-
-        assert hero.state == 'walking'
-        assert hero.next_goal_col == 12
-        assert hero.next_goal_row == 4
-
-    def test_hero_uses_injected_random_choice(self):
-        dungeon = MockDungeon(2, 2)
-
-        # Goal in room (1, 1)
-        goal_row = ROOM_HEIGHT + 5
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(goal_row, goal_col)
-
-        # Add multiple doors to room (0, 0)
-        dungeon.add_door(0, 0, 0)  # East
-        dungeon.add_door(0, 0, 1)  # South
-
-        # Hero in room (0, 0)
-        x, y = room_center(0, 0)
-
-        # Inject choice that always picks the last door
-        hero = Hero(x, y, random_choice=lambda lst: lst[-1])
-
-        hero.decide_next_move(dungeon)
-
-        # Should have picked South (last in list)
-        assert hero.selected_door[0] == 1  # South
-
     def test_hero_aligns_with_east_door(self):
         dungeon = MockDungeon(2, 1)
 
@@ -368,88 +324,11 @@ class TestHeroApproachesFacingDoor:
         assert hero.direction == 1  # Still facing South
 
 
-class TestHeroDoorSelection:
-    """Test door selection logic including entry door avoidance."""
+class TestHeroNavigationTargetStability:
+    """Test that navigation targets remain stable while being pursued."""
 
-    def test_hero_avoids_entry_door_when_other_options_exist(self):
-        dungeon = MockDungeon(2, 2)
-
-        # Goal in room (1, 1)
-        goal_row = ROOM_HEIGHT + 5
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(goal_row, goal_col)
-
-        # Room (0, 0) has east and south doors
-        dungeon.add_door(0, 0, 0)  # East
-        dungeon.add_door(0, 0, 1)  # South
-
-        x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        # Simulate entering from the west (so entry_door_direction = 2 = West)
-        # But there's no west door, so this shouldn't affect anything
-        hero.current_room = (0, 0)
-        hero.entry_door_direction = 0  # Entered from East
-
-        hero.decide_next_move(dungeon)
-
-        # Should pick South since East is entry door
-        assert hero.selected_door[0] == 1  # South
-
-    def test_hero_uses_entry_door_if_only_option(self):
-        dungeon = MockDungeon(2, 1)
-
-        # Goal in room (0, 1)
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(5, goal_col)
-
-        # Room (0, 0) has only east door
-        dungeon.add_door(0, 0, 0)  # East only
-
-        x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        # Simulate that we entered from East (only door)
-        hero.current_room = (0, 0)
-        hero.entry_door_direction = 0  # East
-
-        hero.decide_next_move(dungeon)
-
-        # Must use East door since it's the only one
-        assert hero.selected_door[0] == 0  # East
-
-    def test_hero_resets_door_selection_on_room_change(self):
-        dungeon = MockDungeon(2, 1)
-
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(5, goal_col)
-        dungeon.add_door(0, 0, 0)  # East door in room (0,0)
-        dungeon.add_door(0, 1, 2)  # West door in room (0,1)
-
-        # Start in room (0, 0)
-        x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        hero.decide_next_move(dungeon)
-        first_selected = hero.selected_door
-
-        # Move to room (0, 1)
-        hero.x = room_center(0, 1)[0]
-        hero.y = room_center(0, 1)[1]
-        hero.state = 'idle'
-        hero.direction = 0  # Was facing east when entering
-
-        hero.decide_next_move(dungeon)
-
-        # selected_door should have been reset (we're now in goal room anyway)
-        # Entry door should be West (opposite of East)
-        assert hero.entry_door_direction == 2  # West
-
-
-class TestHeroDoorSelectionStability:
-    """Test that door selection remains stable within a room."""
-
-    def test_selected_door_persists_across_moves(self):
+    def test_target_persists_across_moves(self):
+        """Hero keeps the same goal target while moving toward it."""
         dungeon = MockDungeon(2, 2)
 
         goal_row = ROOM_HEIGHT + 5
@@ -460,26 +339,22 @@ class TestHeroDoorSelectionStability:
         dungeon.add_door(0, 0, 1)  # South
 
         x, y = room_center(0, 0)
-        call_count = [0]
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
 
-        def counting_choice(lst):
-            call_count[0] += 1
-            return lst[0]
-
-        hero = Hero(x, y, random_choice=counting_choice)
-
-        # First call should select a door
+        # First call should select a target
         hero.decide_next_move(dungeon)
-        first_door = hero.selected_door
-        assert call_count[0] == 1
+        first_goal_row = hero.next_goal_row
+        first_goal_col = hero.next_goal_col
+        assert first_goal_row is not None
+        assert first_goal_col is not None
 
-        # Simulate completing a move but staying in same room
+        # Simulate completing a single step but not reaching the target
         hero.state = 'idle'
 
-        # Second call should reuse the same door
+        # Second call should keep the same target
         hero.decide_next_move(dungeon)
-        assert hero.selected_door == first_door
-        assert call_count[0] == 1  # No additional random call
+        assert hero.next_goal_row == first_goal_row
+        assert hero.next_goal_col == first_goal_col
 
 
 class TestHeroLeavesRoom:
@@ -530,125 +405,6 @@ class TestHeroLeavesRoom:
         assert hero.direction == 0  # Still facing East
         # Target should be one tile east (into the next room)
         assert hero.target_x > start_x
-
-
-class TestHeroCorridorNavigation:
-    """Test that hero navigates through corridors without turning around."""
-
-    def test_hero_exits_north_south_corridor_to_south(self):
-        """
-        Test that a hero entering a north-south corridor from the north
-        will always exit to the south without turning around.
-        """
-        # Create a dungeon with two rooms and a corridor between them
-        # Room 0: rows 0-9
-        # Corridor: rows 10-17 (8 tiles)
-        # Room 1: rows 18-27
-
-        # Calculate dimensions
-        corridor_length = 8
-        total_rows = 2 * ROOM_HEIGHT + corridor_length
-        dungeon = MockDungeon(1, 1)
-
-        # Manually resize the map to accommodate two rooms + corridor
-        dungeon.rows = total_rows
-        dungeon.map = np.zeros((total_rows, ROOM_WIDTH), dtype=int)
-
-        # Fill rooms with floor and mark tiles
-        for row in range(ROOM_HEIGHT):
-            for col in range(ROOM_WIDTH):
-                dungeon.map[row, col] = Tile.FLOOR  # Room 0
-                dungeon._tile_to_room[(row, col)] = (0, 0)
-        for row in range(ROOM_HEIGHT + corridor_length, total_rows):
-            for col in range(ROOM_WIDTH):
-                dungeon.map[row, col] = Tile.FLOOR  # Room 1
-                dungeon._tile_to_room[(row, col)] = (1, 0)
-
-        # Set goal in the southern room
-        goal_row = ROOM_HEIGHT + corridor_length + 5
-        goal_col = 5
-        dungeon.set_goal(goal_row, goal_col)
-
-        # Add south door to room 0 (at row 9, cols 5-6)
-        dungeon.map[ROOM_HEIGHT - 1, 5] = Tile.SOUTH_DOOR_WEST
-        dungeon.map[ROOM_HEIGHT - 1, 6] = Tile.SOUTH_DOOR_EAST
-
-        # Create corridor tiles (rows 10-17)
-        corridor_start_row = ROOM_HEIGHT
-        corridor_end_row = ROOM_HEIGHT + corridor_length - 1
-        corridor_col = 5  # Align with door positions
-
-        # Fill corridor with floor and walls
-        # Mark corridor tiles as a special "corridor room" (0, 1) - not a real room
-        # This prevents the hero from thinking it's in either end room
-        for row in range(corridor_start_row, corridor_end_row + 1):
-            dungeon.map[row, corridor_col - 1] = Tile.WEST_WALL
-            dungeon.map[row, corridor_col] = Tile.FLOOR
-            dungeon.map[row, corridor_col + 1] = Tile.FLOOR
-            dungeon.map[row, corridor_col + 2] = Tile.EAST_WALL
-            # Mark corridor tiles as a different "room" to isolate navigation
-            for col in [corridor_col - 1, corridor_col, corridor_col + 1, corridor_col + 2]:
-                dungeon._tile_to_room[(row, col)] = (0, 1)  # Corridor "room"
-
-        # Add door tiles at the corridor entrance (north door of corridor)
-        dungeon.map[corridor_start_row, corridor_col] = Tile.NORTH_DOOR_WEST
-        dungeon.map[corridor_start_row, corridor_col + 1] = Tile.NORTH_DOOR_EAST
-
-        # Add door tiles at the corridor exit (south door of corridor)
-        dungeon.map[corridor_end_row, corridor_col] = Tile.SOUTH_DOOR_WEST
-        dungeon.map[corridor_end_row, corridor_col + 1] = Tile.SOUTH_DOOR_EAST
-
-        # Add north door to room 1 (at row 18, cols 5-6)
-        room1_start_row = ROOM_HEIGHT + corridor_length
-        dungeon.map[room1_start_row, 5] = Tile.NORTH_DOOR_WEST
-        dungeon.map[room1_start_row, 6] = Tile.NORTH_DOOR_EAST
-
-        # Start hero in the middle of the corridor, having just entered from the north
-        corridor_middle_row = (corridor_start_row + corridor_end_row) // 2
-        start_x, start_y = tile_center(corridor_middle_row, corridor_col)
-        hero = Hero(start_x, start_y, random_choice=lambda lst: lst[0])
-        hero.direction = 1  # Facing South (came from north)
-
-        # Simulate that the hero just entered the corridor from room 0
-        # This sets up the entry_door_direction to prevent backtracking
-        hero.current_room = (0, 1)  # Corridor "room"
-        hero.entry_door_direction = 3  # Entered from north, so north door is the entry
-
-        # Track hero's direction through the corridor
-        directions_taken = []
-        positions = []
-        max_iterations = 200
-
-        for i in range(max_iterations):
-            if hero.state == 'idle':
-                hero.decide_next_move(dungeon)
-
-            if hero.state == 'walking':
-                directions_taken.append(hero.direction)
-                positions.append((int(hero.y / TILE_SIZE), hero.entry_door_direction, hero.current_room))
-
-            hero.move(0.1)
-
-            # Check if hero has exited the corridor to the south (reached room 1)
-            hero_row = int(hero.y / TILE_SIZE)
-            if hero_row >= room1_start_row + 2:  # Deep into room 1
-                break
-
-        # Debug output if test fails
-        if 3 in directions_taken:
-            print(f"\nHero turned north at iteration {directions_taken.index(3)}")
-            print(f"Positions when north was chosen: {positions[directions_taken.index(3)]}")
-            print(f"Direction history around that point: {directions_taken[max(0, directions_taken.index(3)-5):directions_taken.index(3)+5]}")
-            print(f"Hero start position: row={corridor_middle_row}, col={corridor_col}")
-            print(f"Doors found in room (0, 0): {dungeon.find_doors_in_room(0, 0)}")
-            print(f"Goal position: {dungeon.find_goal_position()}")
-
-        # Verify hero never turned north (direction 3)
-        assert 3 not in directions_taken, "Hero should never turn north in a north-south corridor"
-
-        # Verify hero reached the southern room
-        final_hero_row = int(hero.y / TILE_SIZE)
-        assert final_hero_row >= room1_start_row, f"Hero should have reached the southern room (row {final_hero_row} >= {room1_start_row})"
 
 
 class TestHeroNavigatesAroundObstacles:
