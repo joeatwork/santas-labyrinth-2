@@ -20,18 +20,19 @@ class MockDungeon:
         self._goal_position: Optional[Tuple[float, float]] = None
 
         # Track which tiles belong to which room (for corridor support)
-        # Maps (tile_row, tile_col) -> (room_row, room_col)
+        # Maps (tile_row, tile_col) -> room_id (int)
         # If not in map, assumed to be corridor/nothing
-        self._tile_to_room: Dict[Tuple[int, int], Tuple[int, int]] = {}
+        self._tile_to_room: Dict[Tuple[int, int], int] = {}
 
         # Fill all rooms with floor by default
         for r in range(self.rows):
             for c in range(self.cols):
                 self.map[r, c] = Tile.FLOOR
-                # Map each tile to its room
+                # Map each tile to its room (room_id = room_row * rooms_wide + room_col)
                 room_row = r // ROOM_HEIGHT
                 room_col = c // ROOM_WIDTH
-                self._tile_to_room[(r, c)] = (room_row, room_col)
+                room_id = room_row * rooms_wide + room_col
+                self._tile_to_room[(r, c)] = room_id
 
     def set_goal(self, tile_row: int, tile_col: int) -> None:
         """Place goal at specific tile coordinates."""
@@ -41,10 +42,10 @@ class MockDungeon:
             tile_row * TILE_SIZE + TILE_SIZE / 2
         )
 
-    def mark_corridor_tile(self, tile_row: int, tile_col: int, adjacent_room: Tuple[int, int]) -> None:
+    def mark_corridor_tile(self, tile_row: int, tile_col: int, adjacent_room_id: int) -> None:
         """Mark a tile as part of a corridor (not belonging to any room)."""
         # Corridor tiles are mapped to an adjacent room for pathfinding purposes
-        self._tile_to_room[(tile_row, tile_col)] = adjacent_room
+        self._tile_to_room[(tile_row, tile_col)] = adjacent_room_id
 
     def add_pillar(self, tile_row: int, tile_col: int) -> None:
         """Place a single pillar obstacle at the given tile."""
@@ -107,19 +108,21 @@ class MockDungeon:
             return tile in self.WALKABLE_TILES
         return False
 
-    def get_room_coords(self, x: float, y: float) -> Tuple[int, int]:
+    def get_room_id(self, x: float, y: float) -> int:
         tile_col = int(x / TILE_SIZE)
         tile_row = int(y / TILE_SIZE)
         # Check if this tile is explicitly mapped to a room
         if (tile_row, tile_col) in self._tile_to_room:
             return self._tile_to_room[(tile_row, tile_col)]
         # Default fallback for unmapped tiles (corridors)
-        return (tile_row // ROOM_HEIGHT, tile_col // ROOM_WIDTH)
+        room_row = tile_row // ROOM_HEIGHT
+        room_col = tile_col // ROOM_WIDTH
+        return room_row * self.rooms_wide + room_col
 
     def find_goal_position(self) -> Optional[Tuple[float, float]]:
         return self._goal_position
 
-    def find_doors_in_room(self, room_row: int, room_col: int) -> List[Tuple[int, float, float]]:
+    def find_doors_in_room(self, room_id: int) -> List[Tuple[int, float, float]]:
         """Scan room tiles for door tiles and return their positions."""
         doors: List[Tuple[int, float, float]] = []
         found_doors: set[int] = set()
@@ -132,7 +135,7 @@ class MockDungeon:
         }
 
         # Find all tiles that belong to this room
-        room_tiles = [(r, c) for (r, c), room in self._tile_to_room.items() if room == (room_row, room_col)]
+        room_tiles = [(r, c) for (r, c), rid in self._tile_to_room.items() if rid == room_id]
 
         for tile_row, tile_col in room_tiles:
             if 0 <= tile_row < self.rows and 0 <= tile_col < self.cols:

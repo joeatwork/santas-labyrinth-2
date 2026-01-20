@@ -99,52 +99,44 @@ class TestDungeonConnectivity:
     """Test that generated dungeons have all areas connected."""
 
     def test_single_room_dungeon_is_connected(self):
-        """A 1x1 dungeon should be trivially connected."""
+        """A 1-room dungeon should be trivially connected."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(1, 1)
+        dungeon_map, _, _, _ = generate_dungeon(1)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"1x1 dungeon not connected: {message}"
+        assert is_connected, f"1-room dungeon not connected: {message}"
 
-    def test_2x2_dungeon_is_connected(self):
-        """A 2x2 dungeon should have all rooms and corridors connected."""
+    def test_4_room_dungeon_is_connected(self):
+        """A 4-room dungeon should have all rooms and corridors connected."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(2, 2)
+        dungeon_map, _, _, _ = generate_dungeon(4)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"2x2 dungeon not connected: {message}"
+        assert is_connected, f"4-room dungeon not connected: {message}"
 
-    def test_3x3_dungeon_is_connected(self):
-        """A 3x3 dungeon should be fully connected."""
+    def test_9_room_dungeon_is_connected(self):
+        """A 9-room dungeon should be fully connected."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(3, 3)
+        dungeon_map, _, _, _ = generate_dungeon(9)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"3x3 dungeon not connected: {message}"
+        assert is_connected, f"9-room dungeon not connected: {message}"
 
-    def test_5x5_dungeon_is_connected(self):
-        """A larger 5x5 dungeon should be fully connected."""
+    def test_25_room_dungeon_is_connected(self):
+        """A larger 25-room dungeon should be fully connected."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(5, 5)
+        dungeon_map, _, _, _ = generate_dungeon(25)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"5x5 dungeon not connected: {message}"
+        assert is_connected, f"25-room dungeon not connected: {message}"
 
-    def test_wide_dungeon_is_connected(self):
-        """A 6x2 wide dungeon should be fully connected."""
+    def test_12_room_dungeon_is_connected(self):
+        """A 12-room dungeon should be fully connected."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(6, 2)
+        dungeon_map, _, _, _ = generate_dungeon(12)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"6x2 dungeon not connected: {message}"
-
-    def test_tall_dungeon_is_connected(self):
-        """A 2x6 tall dungeon should be fully connected."""
-        random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(2, 6)
-
-        is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"2x6 dungeon not connected: {message}"
+        assert is_connected, f"12-room dungeon not connected: {message}"
 
     def test_multiple_random_seeds_produce_connected_dungeons(self):
         """Test that different random seeds all produce connected dungeons."""
@@ -152,14 +144,14 @@ class TestDungeonConnectivity:
 
         for seed in seeds:
             random.seed(seed)
-            dungeon_map, _, _, _ = generate_dungeon(4, 4)
+            dungeon_map, _, _, _ = generate_dungeon(16)
             is_connected, message = is_dungeon_connected(dungeon_map)
-            assert is_connected, f"4x4 dungeon with seed {seed} not connected: {message}"
+            assert is_connected, f"16-room dungeon with seed {seed} not connected: {message}"
 
     def test_goal_is_reachable_from_start(self):
         """Test that the goal tile is reachable from the start position."""
         random.seed(42)
-        dungeon_map, start_pos, _, _ = generate_dungeon(4, 4)
+        dungeon_map, start_pos, _, _ = generate_dungeon(16)
 
         # Find goal tile
         goal_tiles = np.argwhere(dungeon_map == Tile.GOAL)
@@ -186,29 +178,25 @@ class TestDungeonConnectivity:
 class TestConnectivityStressTest:
     """Stress test connectivity with many different dungeon configurations."""
 
-    @pytest.mark.parametrize("width,height", [
-        (1, 1), (2, 1), (1, 2),
-        (2, 2), (3, 2), (2, 3),
-        (3, 3), (4, 3), (3, 4),
-        (4, 4), (5, 4), (4, 5),
-        (5, 5), (6, 5), (5, 6),
+    @pytest.mark.parametrize("num_rooms", [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 16, 20, 25, 30,
     ])
-    def test_various_dungeon_sizes_are_connected(self, width, height):
+    def test_various_dungeon_sizes_are_connected(self, num_rooms):
         """Test that dungeons of various sizes are all connected."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(width, height)
+        dungeon_map, _, _, _ = generate_dungeon(num_rooms)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"{width}x{height} dungeon not connected: {message}"
+        assert is_connected, f"{num_rooms}-room dungeon not connected: {message}"
 
     @pytest.mark.parametrize("seed", range(0, 50))
     def test_fifty_random_dungeons_are_connected(self, seed):
-        """Test 50 different random 4x4 dungeons for connectivity."""
+        """Test 50 different random 16-room dungeons for connectivity."""
         random.seed(seed)
-        dungeon_map, _, _, _ = generate_dungeon(4, 4)
+        dungeon_map, _, _, _ = generate_dungeon(16)
 
         is_connected, message = is_dungeon_connected(dungeon_map)
-        assert is_connected, f"4x4 dungeon with seed {seed} not connected: {message}"
+        assert is_connected, f"16-room dungeon with seed {seed} not connected: {message}"
 
 
 def get_door_tiles(dungeon_map: np.ndarray) -> Set[Tuple[int, int]]:
@@ -274,18 +262,18 @@ class TestNoBlindDoors:
     """Test that generated dungeons have no blind doors (unconnected doors)."""
 
     def test_single_room_has_no_doors(self):
-        """A 1x1 dungeon (single room) should have no doors at all."""
+        """A 1-room dungeon (single room) should have no doors at all."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(1, 1)
+        dungeon_map, _, _, _ = generate_dungeon(1)
 
         door_tiles = get_door_tiles(dungeon_map)
         assert len(door_tiles) == 0, \
             f"Single room dungeon should have no doors, but found {len(door_tiles)} door tiles"
 
-    def test_2x2_dungeon_has_no_blind_doors(self):
-        """A 2x2 dungeon should have no unconnected doors."""
+    def test_4_room_dungeon_has_no_blind_doors(self):
+        """A 4-room dungeon should have no unconnected doors."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(2, 2)
+        dungeon_map, _, _, _ = generate_dungeon(4)
 
         door_tiles = get_door_tiles(dungeon_map)
 
@@ -297,10 +285,10 @@ class TestNoBlindDoors:
         assert len(blind_doors) == 0, \
             f"Found {len(blind_doors)} blind doors at positions: {blind_doors}"
 
-    def test_3x3_dungeon_has_no_blind_doors(self):
-        """A 3x3 dungeon should have no unconnected doors."""
+    def test_9_room_dungeon_has_no_blind_doors(self):
+        """A 9-room dungeon should have no unconnected doors."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(3, 3)
+        dungeon_map, _, _, _ = generate_dungeon(9)
 
         door_tiles = get_door_tiles(dungeon_map)
 
@@ -312,10 +300,10 @@ class TestNoBlindDoors:
         assert len(blind_doors) == 0, \
             f"Found {len(blind_doors)} blind doors at positions: {blind_doors}"
 
-    def test_5x5_dungeon_has_no_blind_doors(self):
-        """A 5x5 dungeon should have no unconnected doors."""
+    def test_25_room_dungeon_has_no_blind_doors(self):
+        """A 25-room dungeon should have no unconnected doors."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(5, 5)
+        dungeon_map, _, _, _ = generate_dungeon(25)
 
         door_tiles = get_door_tiles(dungeon_map)
 
@@ -327,15 +315,13 @@ class TestNoBlindDoors:
         assert len(blind_doors) == 0, \
             f"Found {len(blind_doors)} blind doors at positions: {blind_doors}"
 
-    @pytest.mark.parametrize("width,height", [
-        (2, 2), (3, 2), (2, 3),
-        (3, 3), (4, 3), (3, 4),
-        (4, 4), (5, 5),
+    @pytest.mark.parametrize("num_rooms", [
+        4, 6, 9, 12, 16, 25,
     ])
-    def test_various_dungeon_sizes_have_no_blind_doors(self, width, height):
+    def test_various_dungeon_sizes_have_no_blind_doors(self, num_rooms):
         """Test that dungeons of various sizes have no blind doors."""
         random.seed(42)
-        dungeon_map, _, _, _ = generate_dungeon(width, height)
+        dungeon_map, _, _, _ = generate_dungeon(num_rooms)
 
         door_tiles = get_door_tiles(dungeon_map)
 
@@ -345,7 +331,7 @@ class TestNoBlindDoors:
                 blind_doors.append((door_row, door_col))
 
         assert len(blind_doors) == 0, \
-            f"{width}x{height} dungeon: Found {len(blind_doors)} blind doors at positions: {blind_doors}"
+            f"{num_rooms}-room dungeon: Found {len(blind_doors)} blind doors at positions: {blind_doors}"
 
 
 class TestFindFloorTileInRoom:

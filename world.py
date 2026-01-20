@@ -7,15 +7,15 @@ from typing import Tuple, List, Optional, Callable, Dict
 TILE_SIZE: int = 64
 
 class Dungeon:
-    def __init__(self, width_rooms: int, height_rooms: int) -> None:
+    def __init__(self, num_rooms: int) -> None:
         self.map: DungeonMap
         self.start_pos: Tuple[int, int]
 
         # Room layout information
-        self.room_positions: Dict[Tuple[int, int], Tuple[int, int]]
-        self.room_templates: Dict[Tuple[int, int], RoomTemplate]
+        self.room_positions: Dict[int, Tuple[int, int]]
+        self.room_templates: Dict[int, RoomTemplate]
 
-        self.map, self.start_pos, self.room_positions, self.room_templates = generate_dungeon(width_rooms, height_rooms)
+        self.map, self.start_pos, self.room_positions, self.room_templates = generate_dungeon(num_rooms)
 
         self.rows: int
         self.cols: int
@@ -51,20 +51,19 @@ class Dungeon:
             return tile in self.WALKABLE_TILES
         return False
 
-    def get_room_coords(self, x: float, y: float) -> Tuple[int, int]:
-        """Returns (room_row, room_col) for a given pixel position."""
+    def get_room_id(self, x: float, y: float) -> int:
+        """Returns room_id for a given pixel position."""
         tile_col = int(x / TILE_SIZE)
         tile_row = int(y / TILE_SIZE)
 
         # Search through rooms to find which one contains this tile
-        for (r, c), (pos_x, pos_y) in self.room_positions.items():
-            template = self.room_templates[(r, c)]
+        for room_id, (pos_x, pos_y) in self.room_positions.items():
+            template = self.room_templates[room_id]
             if (pos_x <= tile_col < pos_x + template.width and
                 pos_y <= tile_row < pos_y + template.height):
-                return (r, c)
-        # Not in a room (probably in a corridor) - find nearest room
-        # For now, return based on approximate position
-        return (0, 0)
+                return room_id
+        # Not in a room (probably in a corridor) - return first room
+        return 0
 
     # TODO: caller wants a tile position, not a pixel position!
     def find_goal_position(self) -> Optional[Tuple[int, int]]:
@@ -84,7 +83,7 @@ class Dungeon:
         return False
 
     # TODO: use a data class for doors rather than tuples
-    def find_doors_in_room(self, room_row: int, room_col: int) -> List[Tuple[int, float, float]]:
+    def find_doors_in_room(self, room_id: int) -> List[Tuple[int, float, float]]:
         """
         Returns list of (direction, pixel_x, pixel_y) for doors in the given room.
         Direction: 0=East, 1=South, 2=West, 3=North
@@ -95,10 +94,10 @@ class Dungeon:
         found_doors: set[int] = set()  # Track which directions we've found
 
         # Determine room bounds
-        if (room_row, room_col) not in self.room_positions:
+        if room_id not in self.room_positions:
             return doors
-        pos_x, pos_y = self.room_positions[(room_row, room_col)]
-        template = self.room_templates[(room_row, room_col)]
+        pos_x, pos_y = self.room_positions[room_id]
+        template = self.room_templates[room_id]
         base_col = pos_x
         base_row = pos_y
         room_width = template.width
@@ -201,7 +200,7 @@ class Hero:
         elif current_tile in (Tile.WEST_DOOR_NORTH, Tile.WEST_DOOR_SOUTH):
             self.last_door_direction = 2
 
-        current_room = dungeon.get_room_coords(self.x, self.y)
+        current_room = dungeon.get_room_id(self.x, self.y)
 
         if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
             # Reached target
@@ -215,8 +214,8 @@ class Hero:
             # Select new target
             goal_pos = dungeon.find_goal_position()
             if goal_pos:
-                # TODO: call get_room_coords with tile positions, not pixel positions
-                goal_room = dungeon.get_room_coords(
+                # TODO: call get_room_id with tile positions, not pixel positions
+                goal_room = dungeon.get_room_id(
                     goal_pos[0], goal_pos[1]
                 )
                 
@@ -226,7 +225,7 @@ class Hero:
                     self.next_goal_col = goal_pos[0] // TILE_SIZE
         
         if self.next_goal_row is None or self.next_goal_col is None:
-            doors = dungeon.find_doors_in_room(current_room[0], current_room[1])
+            doors = dungeon.find_doors_in_room(current_room)
             other_doors = [d for d in doors if d[0] != self.last_door_direction]
             chosen_door = None
             if other_doors:

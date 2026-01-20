@@ -72,8 +72,7 @@ def render_dungeon_ascii(dungeon_map):
 
 def main():
     parser = argparse.ArgumentParser(description="Render dungeon as ASCII art")
-    parser.add_argument("--width", type=int, default=3, help="Map width in rooms")
-    parser.add_argument("--height", type=int, default=3, help="Map height in rooms")
+    parser.add_argument("--num-rooms", type=int, default=9, help="Number of rooms in dungeon")
     parser.add_argument("--seed", type=int, help="Random seed for reproducible generation")
     args = parser.parse_args()
 
@@ -81,7 +80,7 @@ def main():
         random.seed(args.seed)
 
     dungeon_map, start_pos, room_positions, room_assignments = generate_dungeon(
-        args.width, args.height
+        args.num_rooms
     )
 
     ascii_art = render_dungeon_ascii(dungeon_map)

@@ -622,11 +622,11 @@ def _crop_dungeon_map(dungeon_map: np.ndarray) -> Tuple[np.ndarray, Position]:
     return cropped, Position(row=min_row, column=min_col)
 
 
-def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
+def generate_dungeon(num_rooms: int) -> Tuple[
     DungeonMap,
     Tuple[int, int],
-    Dict[Tuple[int, int], Tuple[int, int]],
-    Dict[Tuple[int, int], RoomTemplate],
+    Dict[int, Tuple[int, int]],
+    Dict[int, RoomTemplate],
 ]:
     """
     Generates a dungeon by organically growing rooms from open doors.
@@ -634,8 +634,7 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     Uses the ultra-simple algorithm documented at the top of this file.
 
     Parameters:
-        map_width_rooms: Ignored (kept for compatibility). Total rooms = width * height
-        map_height_rooms: Ignored (kept for compatibility). Total rooms = width * height
+        num_rooms: Target number of rooms to generate
 
     Returns:
         dungeon_map: The tile map
@@ -646,11 +645,7 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     # TODO: ensure that the start position returned from this function is always
     # a walkable tile.
 
-    # TODO: update this signature to take a single "num_rooms" argument
-    # rather than a width and height. Update the return value to identify
-    # rooms with a single id rather than a (row, column) pair
-
-    target_num_rooms = map_width_rooms * map_height_rooms
+    target_num_rooms = num_rooms
 
     # We'll use a much larger canvas to avoid worrying about bounds initially
     # Estimate: each room ~12x10, each corridor ~8, max branches ~4 per room
@@ -808,15 +803,9 @@ def generate_dungeon(map_width_rooms: int, map_height_rooms: int) -> Tuple[
     start_pos = find_floor_tile_in_room(dungeon_map, start_room_pos, start_template)
     start_pos_pixel = (start_pos.column * 64, start_pos.row * 64)
 
-    # Convert room_ids to (row, col) format for compatibility
-    # We'll just assign sequential grid positions
-    room_positions_compat = {}
-    room_assignments_compat = {}
-    for idx, (room_id, template) in enumerate(room_assignments.items()):
-        grid_row = idx // map_width_rooms
-        grid_col = idx % map_width_rooms
-        pos = room_positions_adjusted[room_id]
-        room_positions_compat[(grid_row, grid_col)] = (pos.column, pos.row)
-        room_assignments_compat[(grid_row, grid_col)] = template
+    # Convert Position objects to (tile_x, tile_y) tuples for the return value
+    room_positions_final: Dict[int, Tuple[int, int]] = {}
+    for room_id, pos in room_positions_adjusted.items():
+        room_positions_final[room_id] = (pos.column, pos.row)
 
-    return dungeon_map, start_pos_pixel, room_positions_compat, room_assignments_compat
+    return dungeon_map, start_pos_pixel, room_positions_final, room_assignments

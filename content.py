@@ -178,9 +178,8 @@ class TitleCard(Content):
         return self.audio_finished and len(self.audio_buffer) == 0
 
 class DungeonWalk(Content):
-    def __init__(self, map_width_rooms: int, map_height_rooms: int, assets: AssetManager):
-        self.map_width = map_width_rooms
-        self.map_height = map_height_rooms
+    def __init__(self, num_rooms: int, assets: AssetManager):
+        self.num_rooms = num_rooms
         self.assets = assets
         self.dungeon: Optional[Dungeon] = None
         self.hero: Optional[Hero] = None
@@ -189,7 +188,7 @@ class DungeonWalk(Content):
 
     def enter(self) -> None:
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
-        self.dungeon = Dungeon(self.map_width, self.map_height)
+        self.dungeon = Dungeon(self.num_rooms)
         self.hero = Hero(self.dungeon.start_pos[0], self.dungeon.start_pos[1])
         self.background = create_dungeon_background(self.dungeon.map, self.assets)
         self.foreground = create_dungeon_foreground(self.dungeon.map, self.assets)
