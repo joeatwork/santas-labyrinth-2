@@ -2,9 +2,16 @@ import cv2
 import os
 import sys
 import numpy as np
-from dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
-from world import Hero
-from typing import Dict, Any, Optional, Tuple
+from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
+from typing import Dict, Any, Optional, Tuple, Protocol
+
+
+class HeroLike(Protocol):
+    """Protocol for hero-like objects that can be rendered."""
+    x: float
+    y: float
+    direction: int
+    walk_frame: int
 
 # Type Definition
 Image = np.ndarray
@@ -136,6 +143,8 @@ FOREGROUND_TILE_MAP: Dict[int, Optional[str]] = {
     Tile.NOTHING: None
 }
 
+# TODO: move AssetManager into it's own module, since it's used by non-dungeon code
+# (move other non-dungeon code out of animation.py as well)
 class AssetManager:
     def __init__(self) -> None:
         self.images: Dict[str, Image] = {}
@@ -273,7 +282,7 @@ def create_dungeon_foreground(dungeon_map: DungeonMap, assets: AssetManager) -> 
     return fg
 
 
-def render_frame_camera(bg_image: Image, assets: AssetManager, hero: Hero, view_width: int, view_height: int, fg_image: Optional[Image] = None) -> Image:
+def render_frame_camera(bg_image: Image, assets: AssetManager, hero: HeroLike, view_width: int, view_height: int, fg_image: Optional[Image] = None) -> Image:
     """
     Renders the frame centered on the hero.
     """

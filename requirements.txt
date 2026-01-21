@@ -3,3 +3,4 @@ numpy
 av
 pytest
 mypy
+Pillow

@@ -3,7 +3,7 @@
 import pytest
 from typing import Set, Tuple
 
-from pathfinding import find_path_bfs
+from dungeon.pathfinding import find_path_bfs
 
 
 def make_walkability_checker(blocked_tiles: Set[Tuple[int, int]], rows: int, cols: int):

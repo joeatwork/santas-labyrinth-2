@@ -6,7 +6,7 @@ import random
 from typing import Set, Tuple, List, Deque, Optional
 from collections import deque
 
-from dungeon_gen import (
+from dungeon.dungeon_gen import (
     generate_dungeon,
     Tile,
     find_floor_tile_in_room,
@@ -339,7 +339,7 @@ class TestFindFloorTileInRoom:
 
     def test_finds_floor_when_center_is_obstructed(self):
         """A room with a pillar at center should still find a nearby floor tile."""
-        from dungeon_gen import ASCII_TO_TILE
+        from dungeon.dungeon_gen import ASCII_TO_TILE
 
         template = RoomTemplate(
             name="test-obstructed",
@@ -364,7 +364,7 @@ class TestFindFloorTileInRoom:
 
     def test_finds_floor_in_big_pillar_room(self):
         """The big-pillar room template has a 2x2 pillar at center; should find floor nearby."""
-        from dungeon_gen import ASCII_TO_TILE
+        from dungeon.dungeon_gen import ASCII_TO_TILE
 
         template = RoomTemplate(
             name="big-pillar",

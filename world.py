@@ -1,7 +1,8 @@
 import math
+import sys
 import numpy as np
-from dungeon_gen import generate_dungeon, Tile, DungeonMap, RoomTemplate
-from pathfinding import find_path_bfs
+from dungeon.dungeon_gen import generate_dungeon, Tile, DungeonMap, RoomTemplate
+from dungeon.pathfinding import find_path_bfs
 from typing import Tuple, List, Optional, Callable, Dict
 
 TILE_SIZE: int = 64
@@ -155,6 +156,10 @@ class Hero:
 
         # Navigation state
         self.last_door_direction: Optional[int] = None  # Direction of last door passed through
+        self.last_room_id: Optional[int] = None  # Room ID we were last in (for detecting room changes)
+
+        # Dead end tracking: set of (room_id, direction) tuples for doors that lead to dead ends
+        self.dead_end_doors: set[Tuple[int, int]] = set()
 
         # BFS pathfinding state
         self.current_path: Optional[List[Tuple[int, int]]] = None  # List of (row, col) tiles
@@ -163,6 +168,53 @@ class Hero:
 
         # Dependency injection for random selection (for testing)
         self._random_choice: Callable[[List], any] = random_choice or (lambda lst: lst[np.random.randint(0, len(lst))])
+
+    def is_dead_end(self, room_id: int, direction: int) -> bool:
+        """Check if a door (identified by room_id and direction) is marked as a dead end."""
+        return (room_id, direction) in self.dead_end_doors
+
+    def mark_dead_end(self, room_id: int, direction: int) -> None:
+        """Mark a door as a dead end."""
+        self.dead_end_doors.add((room_id, direction))
+
+    def _check_and_mark_dead_end(self, dungeon: Dungeon, previous_room_id: int, entry_direction: int) -> None:
+        """
+        Check if the door we just came through should be marked as a dead end.
+
+        A door is a dead end if:
+        - The room it leads to has no other doors, OR
+        - All other doors in the room (except the entry door) are already marked as dead ends
+
+        Args:
+            dungeon: The dungeon we're navigating
+            previous_room_id: The room we just left
+            entry_direction: The direction of the door we entered through (from the previous room's perspective)
+        """
+        # Get the opposite direction (the door we entered through in the current room)
+        opposite_direction = (entry_direction + 2) % 4
+
+        current_room_id = dungeon.get_room_id(self.x, self.y)
+        doors_in_current_room = dungeon.find_doors_in_room(current_room_id)
+
+        # Get all doors except the one we entered through
+        other_doors = [d for d in doors_in_current_room if d[0] != opposite_direction]
+
+        # Check if this is a dead end
+        is_dead_end = False
+        if not other_doors:
+            # No other doors - this is a dead end
+            is_dead_end = True
+        else:
+            # Check if all other doors are already marked as dead ends
+            all_dead_ends = all(
+                self.is_dead_end(current_room_id, d[0]) for d in other_doors
+            )
+            if all_dead_ends:
+                is_dead_end = True
+
+        if is_dead_end:
+            # Mark the door we came through (in the previous room) as a dead end
+            self.mark_dead_end(previous_room_id, entry_direction)
 
     def update(self, dt: float, dungeon: Dungeon) -> None:
         if self.state == 'idle':
@@ -175,11 +227,16 @@ class Hero:
     def decide_next_move(self, dungeon: Dungeon) -> None:
         """
         Hero uses the following algorithm to navigate the dungeon:
-        
+
         If the hero has no selected target, select a target based on the following priority:
             - The goal if it is in the same room as the hero
-            - A walkable space just beyond a door in the current room that the hero did not pass through most recently
+            - A walkable space just beyond a non-dead-end door that the hero did not pass through most recently
+            - A walkable space just beyond a dead-end door (if no other options)
             - A walkable space just beyond the door the hero did pass through most recently
+
+        A door is marked as a dead end if:
+            - It leads to a room with no other doors, OR
+            - It leads to a room where all other doors are already marked as dead ends
 
         If the hero has a selected target, compute a path to that target using BFS and follow it.
 
@@ -202,7 +259,15 @@ class Hero:
 
         current_room = dungeon.get_room_id(self.x, self.y)
 
+        # Detect room changes and check for dead ends
+        if self.last_room_id is not None and current_room != self.last_room_id:
+            # We've entered a new room - check if the door we came through is a dead end
+            if self.last_door_direction is not None:
+                self._check_and_mark_dead_end(dungeon, self.last_room_id, self.last_door_direction)
+        self.last_room_id = current_room
+
         if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
+            print("hero reached target, reconsidering...", file=sys.stderr)
             # Reached target
             self.next_goal_row = None
             self.next_goal_col = None
@@ -220,39 +285,45 @@ class Hero:
                 )
                 
                 if current_room == goal_room:
+                    print("hero reached goal room, targeting goal...", file=sys.stderr)
                     # Goal is in the same room - target it
                     self.next_goal_row = goal_pos[1] // TILE_SIZE
                     self.next_goal_col = goal_pos[0] // TILE_SIZE
         
         if self.next_goal_row is None or self.next_goal_col is None:
+            # A robot in a room with no doors and no goal will crash
             doors = dungeon.find_doors_in_room(current_room)
+            # Filter out the door we just came through
             other_doors = [d for d in doors if d[0] != self.last_door_direction]
-            chosen_door = None
-            if other_doors:
-                # Select a door we did not just come through
-                chosen_door = self._random_choice(other_doors)
-            elif doors:
+            # Filter out dead end doors
+            non_dead_end_doors = [d for d in other_doors if not self.is_dead_end(current_room, d[0])]
+
+            if non_dead_end_doors:
+                print("Hero selecting non-dead-end door...", file=sys.stderr)
+                # Prefer doors that are not dead ends and not the entry door
+                chosen_door = self._random_choice(non_dead_end_doors)
+            else:
+                print(f"Hero saw {len(other_doors)} dead end doors, leaving how we came in...", file=sys.stderr)
                 # No other doors, select the door we came through
                 chosen_door = doors[0]
             
-            if chosen_door:
-                door_dir, door_x, door_y = chosen_door
-                # Set target to a tile just beyond the door
-                if door_dir == 0:  # East
-                    self.next_goal_row = int(door_y / TILE_SIZE)
-                    self.next_goal_col = int(door_x / TILE_SIZE) + 2
-                elif door_dir == 1:  # South
-                    self.next_goal_row = int(door_y / TILE_SIZE) + 2
-                    self.next_goal_col = int(door_x / TILE_SIZE)
-                elif door_dir == 2:  # West
-                    self.next_goal_row = int(door_y / TILE_SIZE)
-                    self.next_goal_col = int(door_x / TILE_SIZE) - 2
-                elif door_dir == 3:  # North
-                    self.next_goal_row = int(door_y / TILE_SIZE) - 2
-                    self.next_goal_col = int(door_x / TILE_SIZE)
-                else:
-                    raise ValueError("Invalid door direction {door_dir}")
-            
+            door_dir, door_x, door_y = chosen_door
+            # Set target to a tile just beyond the door
+            if door_dir == 0:  # East
+                self.next_goal_row = int(door_y / TILE_SIZE)
+                self.next_goal_col = int(door_x / TILE_SIZE) + 2
+            elif door_dir == 1:  # South
+                self.next_goal_row = int(door_y / TILE_SIZE) + 2
+                self.next_goal_col = int(door_x / TILE_SIZE)
+            elif door_dir == 2:  # West
+                self.next_goal_row = int(door_y / TILE_SIZE)
+                self.next_goal_col = int(door_x / TILE_SIZE) - 2
+            elif door_dir == 3:  # North
+                self.next_goal_row = int(door_y / TILE_SIZE) - 2
+                self.next_goal_col = int(door_x / TILE_SIZE)
+            else:
+                raise ValueError("Invalid door direction {door_dir}")
+        
         # Check if we need to (re)compute the path
         should_recompute_path = (
             self.current_path is None or
@@ -261,17 +332,23 @@ class Hero:
         )
 
         if should_recompute_path:
-            self.current_path = find_path_bfs(
+            new_path = find_path_bfs(
                 hero_row, hero_col,
                 self.next_goal_row, self.next_goal_col,
                 dungeon.is_tile_walkable,
-                max_distance=150,
+                max_distance=300,
             )
+            if new_path is None:
+                raise ValueError(f"Hero could not find path to target ({self.next_goal_row}, {self.next_goal_col}) from ({hero_row}, {hero_col})")
+
+            self.current_path = new_path
             self.path_index = 0
             self._path_target = (self.next_goal_row, self.next_goal_col)
+            print(f"Hero computing path to ({self.next_goal_row}, {self.next_goal_col})...", file=sys.stderr)
+            print(self.current_path, file=sys.stderr)
 
         # Follow the computed path
-        if self.current_path and self.path_index < len(self.current_path):
+        if self.current_path:
             next_row, next_col = self.current_path[self.path_index]
 
             # Update direction based on next tile

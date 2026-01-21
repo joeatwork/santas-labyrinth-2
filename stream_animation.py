@@ -3,7 +3,7 @@ import sys
 import os
 import random
 import glob
-from animation import AssetManager
+from dungeon.animation import AssetManager
 from streaming import FFmpegStreamer
 from content import VideoProgram, TitleCard, DungeonWalk, VideoClip
 
@@ -58,6 +58,8 @@ def main():
     title_card_songs = glob.glob(os.path.join('large_audio', '*.mp3'))
     random.shuffle(title_card_songs)
 
+    # TODO: it's inefficent to build N dungeon walks when we have N videos.
+    # Instead, use a stack of videos inside of the Dungeon walk content.
     for video_path in movie_videos:
         title_image = title_cards.pop(0)
         title_cards.append(title_image)  # Rotate title cards
@@ -112,10 +114,6 @@ def main():
                     break
 
             frame_count += 1
-
-            # Progress indicator every second
-            if frame_count % args.fps == 0:
-                log(f"Frame {frame_count} ({frame_count // args.fps}s)")
     finally:
         log("Stopping stream...")
         streamer.close()

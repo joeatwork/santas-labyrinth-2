@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 
-from dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
+from dungeon.dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
 from world import Hero, Dungeon, TILE_SIZE
 
 
@@ -499,3 +499,118 @@ class TestHeroNavigatesAroundObstacles:
         assert hero.current_path is not None, "Hero should have computed a path"
         assert (pillar_row, pillar_col) not in hero.current_path, \
             "Path should not include the pillar tile"
+
+
+class TestHeroDeadEndTracking:
+    """Test that hero marks and avoids dead end doors."""
+
+    def test_hero_marks_door_as_dead_end_when_room_has_no_other_doors(self):
+        """Hero marks a door as dead end after entering a room with only one door."""
+        dungeon = MockDungeon(2, 1)
+
+        # Room 0 (left) has east door, Room 1 (right) has only west door (dead end)
+        dungeon.add_door(0, 0, 0)  # East door in room 0
+        dungeon.add_door(0, 1, 2)  # West door in room 1
+
+        # Start hero in room 0
+        x, y = room_center(0, 0)
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+
+        # Hero should not have any dead ends marked yet
+        assert len(hero.dead_end_doors) == 0
+
+        # Simulate hero walking through the east door into room 1
+        # First, get the hero to target the door
+        hero.decide_next_move(dungeon)
+
+        # Move hero to room 1 (past the door)
+        hero.x = ROOM_WIDTH * TILE_SIZE + TILE_SIZE * 5  # Center of room 1
+        hero.y = TILE_SIZE * 5
+        hero.last_door_direction = 0  # Came through east door
+        hero.last_room_id = 0  # Was in room 0
+
+        # Now call decide_next_move - it should detect room change and mark dead end
+        hero.decide_next_move(dungeon)
+
+        # The east door of room 0 should now be marked as a dead end
+        assert hero.is_dead_end(0, 0), "East door of room 0 should be marked as dead end"
+
+    def test_hero_prefers_non_dead_end_doors(self):
+        """Hero chooses non-dead-end doors over dead-end doors."""
+        dungeon = MockDungeon(2, 2)
+
+        # Room 0 has east and south doors
+        dungeon.add_door(0, 0, 0)  # East door
+        dungeon.add_door(0, 0, 1)  # South door
+
+        x, y = room_center(0, 0)
+        # Use random_choice that returns last item (to verify filtering works)
+        hero = Hero(x, y, random_choice=lambda lst: lst[-1])
+
+        # Mark east door as dead end
+        hero.mark_dead_end(0, 0)
+
+        # Hero should choose south door (only non-dead-end option)
+        hero.decide_next_move(dungeon)
+
+        # Target should be beyond south door (row + 2)
+        expected_target_row = 9 + 2  # South door is at row 9, target is 2 tiles beyond
+        assert hero.next_goal_row == expected_target_row, \
+            f"Hero should target south door, got row {hero.next_goal_row}"
+
+    def test_hero_uses_dead_end_door_when_no_other_options(self):
+        """Hero uses dead-end door when it's the only non-entry option."""
+        dungeon = MockDungeon(2, 2)
+
+        # Room 0 has east and south doors
+        dungeon.add_door(0, 0, 0)  # East door
+        dungeon.add_door(0, 0, 1)  # South door
+
+        x, y = room_center(0, 0)
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+
+        # Mark both doors as dead ends
+        hero.mark_dead_end(0, 0)  # East
+        hero.mark_dead_end(0, 1)  # South
+
+        # Hero should still choose one of them (prefers not entry door)
+        hero.decide_next_move(dungeon)
+
+        # Should have selected a target (one of the dead end doors)
+        assert hero.next_goal_row is not None
+        assert hero.next_goal_col is not None
+
+    def test_hero_marks_door_as_dead_end_when_all_other_doors_are_dead_ends(self):
+        """Hero marks entry door as dead end if all other doors in room are dead ends."""
+        dungeon = MockDungeon(3, 1)
+
+        # Room layout: [0] -- [1] -- [2]
+        # Room 0: east door
+        # Room 1: west door (to room 0), east door (to room 2)
+        # Room 2: west door only (dead end)
+        dungeon.add_door(0, 0, 0)  # Room 0 east
+        dungeon.add_door(0, 1, 2)  # Room 1 west
+        dungeon.add_door(0, 1, 0)  # Room 1 east
+        dungeon.add_door(0, 2, 2)  # Room 2 west
+
+        # Start in room 1, having come from room 0
+        x, y = room_center(0, 1)
+        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+        hero.last_room_id = 0  # Came from room 0
+        hero.last_door_direction = 0  # Through east door of room 0
+
+        # Mark the east door of room 1 as already a dead end
+        # (simulating that we already explored room 2)
+        hero.mark_dead_end(1, 0)
+
+        # Now when hero enters room 1, it should see:
+        # - Entry door (west) - don't count this
+        # - East door - marked as dead end
+        # Since all non-entry doors are dead ends, entry door should be marked
+
+        # Trigger the dead end check
+        hero._check_and_mark_dead_end(dungeon, 0, 0)
+
+        # Room 0's east door should now be marked as dead end
+        assert hero.is_dead_end(0, 0), \
+            "East door of room 0 should be marked as dead end (leads to room with only dead ends)"

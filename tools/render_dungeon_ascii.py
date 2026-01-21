@@ -11,10 +11,10 @@ import random
 import sys
 from pathlib import Path
 
-# Add parent directory to path so we can import dungeon_gen
+# Add parent directory to path so we can import dungeon
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dungeon_gen import generate_dungeon, Tile
+from dungeon.dungeon_gen import generate_dungeon, Tile
 
 
 # Mapping from tile IDs to ASCII characters

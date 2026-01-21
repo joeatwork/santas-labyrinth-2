@@ -47,6 +47,9 @@ class FFmpegStreamer:
             # and the -re flag ensures we don't overwhelm client buffers
             # by getting too far ahead.
             "-re",
+            
+            # log progress once per minute
+            "-stats_period", "60",
 
             "-y",
             "-f", "nut",

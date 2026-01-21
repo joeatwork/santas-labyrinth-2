@@ -5,8 +5,9 @@ import numpy as np
 import random
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Optional, Any
+from PIL import Image as PILImage, ImageDraw, ImageFont
 
-from animation import AssetManager, Image, create_dungeon_background, create_dungeon_foreground, render_frame_camera
+from dungeon.animation import AssetManager, Image, create_dungeon_background, create_dungeon_foreground, render_frame_camera
 from world import Dungeon, Hero
 
 class Content(ABC):
@@ -52,9 +53,7 @@ class TitleCard(Content):
         self.volume = volume
         self.image = cv2.imread(image_path)
         if self.image is None:
-            # Fallback to black if missing
-            print(f"Warning: Could not load title card {image_path}", file=sys.stderr)
-            self.image = None
+            raise ValueError(f"Could not load title card image {image_path}")
 
         # Audio state
         self.audio_container: Optional[av.container.InputContainer] = None
@@ -95,13 +94,10 @@ class TitleCard(Content):
             )
             print(f"TitleCard audio: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
         else:
-            print(f"Warning: No audio stream in {self.audio_path}", file=sys.stderr)
-            self.audio_stream = None
-            self.audio_resampler = None
-            self.audio_finished = True
+            raise ValueError("no audio stream in {self.audio_path}")
 
     def _decode_audio(self) -> bool:
-        """Decode more audio into the buffer. Returns False if EOF reached."""
+        """Decode more audio into the buffer. Returns False if EOF reached or if the stream can't be read."""
         if self.audio_container is None or self.audio_stream is None or self.audio_resampler is None:
             return False
 
@@ -177,6 +173,63 @@ class TitleCard(Content):
             return False  # No audio, rely on duration
         return self.audio_finished and len(self.audio_buffer) == 0
 
+class CrashOverlay:
+    """
+    Renders a white box overlay with dynamic text lines.
+    Used to display crash/error messages on top of content.
+    """
+    def __init__(self, text_lines: List[str], duration: float = 10.0):
+        self.text_lines = text_lines
+        self.elapsed: float = 0.0
+        self.duration = duration
+
+    def update(self, dt: float) -> None:
+        self.elapsed += dt
+
+    def is_complete(self) -> bool:
+        return self.elapsed >= self.duration
+
+    def render(self, base_frame: Image, width: int, height: int) -> Image:
+        """Render white box with text on top of base frame."""
+        # Convert BGR numpy array to RGB PIL Image
+        rgb_frame = cv2.cvtColor(base_frame, cv2.COLOR_BGR2RGB)
+        pil_image = PILImage.fromarray(rgb_frame)
+        draw = ImageDraw.Draw(pil_image)
+
+        # Calculate box dimensions (60% of screen, centered)
+        box_width = int(width * 0.6)
+        box_height = int(height * 0.4)
+        box_x = (width - box_width) // 2
+        box_y = (height - box_height) // 2
+
+        # Draw white box with black border
+        draw.rectangle(
+            [box_x, box_y, box_x + box_width, box_y + box_height],
+            fill='white',
+            outline='black',
+            width=3
+        )
+
+        # Load a font (use default if no specific font available)
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
+        except (IOError, OSError):
+            font = ImageFont.load_default()
+
+        # Draw text lines centered in the box
+        text_y = box_y + 40
+        for line in self.text_lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_x = box_x + (box_width - text_width) // 2
+            draw.text((text_x, text_y), line, fill='black', font=font)
+            text_y += 35
+
+        # Convert back to BGR numpy array
+        rgb_result = np.array(pil_image)
+        return cv2.cvtColor(rgb_result, cv2.COLOR_RGB2BGR)
+
+
 class DungeonWalk(Content):
     def __init__(self, num_rooms: int, assets: AssetManager):
         self.num_rooms = num_rooms
@@ -186,6 +239,11 @@ class DungeonWalk(Content):
         self.background: Optional[Image] = None
         self.foreground: Optional[Image] = None
 
+        # Crash detection state
+        self.idle_time: float = 0.0
+        self.idle_threshold: float = 3.0  # seconds before crash is triggered
+        self.crash_overlay: Optional[CrashOverlay] = None
+
     def enter(self) -> None:
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
         self.dungeon = Dungeon(self.num_rooms)
@@ -193,16 +251,53 @@ class DungeonWalk(Content):
         self.background = create_dungeon_background(self.dungeon.map, self.assets)
         self.foreground = create_dungeon_foreground(self.dungeon.map, self.assets)
 
+        # Reset crash state
+        self.idle_time = 0.0
+        self.crash_overlay = None
+
     def update(self, dt: float) -> None:
+        # If crash overlay is active, update it and skip hero updates
+        if self.crash_overlay:
+            self.crash_overlay.update(dt)
+            return
+
         if self.hero and self.dungeon:
             self.hero.update(dt, self.dungeon)
 
+            # Track idle time for crash detection
+            if self.hero.state == 'idle':
+                self.idle_time += dt
+                if self.idle_time > self.idle_threshold:
+                    self._trigger_crash()
+            else:
+                self.idle_time = 0.0
+
+    def _trigger_crash(self) -> None:
+        """Trigger crash overlay when hero is stuck."""
+        print("DungeonWalk: Hero crash detected, showing overlay...", file=sys.stderr)
+        self.crash_overlay = CrashOverlay([
+            "robot crash detected ... rebooting ..."
+        ])
+
     def render(self, width: int, height: int) -> Image:
+        # Render base dungeon frame
         if self.hero and self.background is not None:
-            return render_frame_camera(self.background, self.assets, self.hero, width, height, self.foreground)
-        return np.zeros((height, width, 3), np.uint8)
+            base_frame = render_frame_camera(self.background, self.assets, self.hero, width, height, self.foreground)
+        else:
+            base_frame = np.zeros((height, width, 3), np.uint8)
+
+        # Overlay crash box if active
+        if self.crash_overlay:
+            return self.crash_overlay.render(base_frame, width, height)
+
+        return base_frame
 
     def is_complete(self) -> bool:
+        # Complete if crash overlay finished
+        if self.crash_overlay and self.crash_overlay.is_complete():
+            return True
+
+        # Existing goal completion logic
         if self.hero and self.dungeon:
             return self.dungeon.is_on_goal(self.hero.x, self.hero.y)
         return False
