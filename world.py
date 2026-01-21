@@ -63,7 +63,7 @@ class Dungeon:
             if (pos_x <= tile_col < pos_x + template.width and
                 pos_y <= tile_row < pos_y + template.height):
                 return room_id
-        # Not in a room (probably in a corridor) - return first room
+
         return 0
 
     # TODO: caller wants a tile position, not a pixel position!

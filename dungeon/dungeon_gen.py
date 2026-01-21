@@ -259,7 +259,7 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
             "[............]",
             "[............]",
             "[....^__!....]",
-            "W....]  [....E",
+            "w....]  [....e",
             "W....]  [....E",
             "[....~--,....]",
             "[............]",
@@ -657,14 +657,11 @@ def generate_dungeon(num_rooms: int) -> Tuple[
         room_positions: Dict mapping room_id to (tile_x, tile_y) position
         room_assignments: Dict mapping room_id to RoomTemplate used
     """
-    # TODO: ensure that the start position returned from this function is always
-    # a walkable tile.
-
     target_num_rooms = num_rooms
 
     # We'll use a much larger canvas to avoid worrying about bounds initially
-    # Estimate: each room ~12x10, each corridor ~8, max branches ~4 per room
-    # Rough estimate: 30 rooms * (12 + 8) * 4 directions = ~2400 tiles per dimension
+    # TODO: create this canvas after choosing all rooms layout so you know
+    # in advance the actual size of the dungeon
     canvas_size = max(2000, target_num_rooms * 100)
 
     # Create empty canvas (we'll crop it later)
