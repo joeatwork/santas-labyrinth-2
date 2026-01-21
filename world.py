@@ -267,7 +267,6 @@ class Hero:
         self.last_room_id = current_room
 
         if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
-            print("hero reached target, reconsidering...", file=sys.stderr)
             # Reached target
             self.next_goal_row = None
             self.next_goal_col = None
@@ -285,7 +284,6 @@ class Hero:
                 )
                 
                 if current_room == goal_room:
-                    print("hero reached goal room, targeting goal...", file=sys.stderr)
                     # Goal is in the same room - target it
                     self.next_goal_row = goal_pos[1] // TILE_SIZE
                     self.next_goal_col = goal_pos[0] // TILE_SIZE
@@ -299,11 +297,9 @@ class Hero:
             non_dead_end_doors = [d for d in other_doors if not self.is_dead_end(current_room, d[0])]
 
             if non_dead_end_doors:
-                print("Hero selecting non-dead-end door...", file=sys.stderr)
                 # Prefer doors that are not dead ends and not the entry door
                 chosen_door = self._random_choice(non_dead_end_doors)
             else:
-                print(f"Hero saw {len(other_doors)} dead end doors, leaving how we came in...", file=sys.stderr)
                 # No other doors, select the door we came through
                 chosen_door = doors[0]
             
@@ -336,7 +332,7 @@ class Hero:
                 hero_row, hero_col,
                 self.next_goal_row, self.next_goal_col,
                 dungeon.is_tile_walkable,
-                max_distance=300,
+                max_distance=1000, # This isn't really max distance, it's max *area*, so think in squared terms
             )
             if new_path is None:
                 raise ValueError(f"Hero could not find path to target ({self.next_goal_row}, {self.next_goal_col}) from ({hero_row}, {hero_col})")
@@ -344,8 +340,6 @@ class Hero:
             self.current_path = new_path
             self.path_index = 0
             self._path_target = (self.next_goal_row, self.next_goal_col)
-            print(f"Hero computing path to ({self.next_goal_row}, {self.next_goal_col})...", file=sys.stderr)
-            print(self.current_path, file=sys.stderr)
 
         # Follow the computed path
         if self.current_path:

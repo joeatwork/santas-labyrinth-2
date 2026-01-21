@@ -4,6 +4,7 @@ Pathfinding algorithms for dungeon navigation.
 
 from collections import deque
 import random
+import sys
 from typing import Callable, List, Tuple, Optional, Dict
 
 # A path is a list of tile coordinates (row, col), ordered from start to goal
@@ -51,7 +52,10 @@ def find_path_bfs(
 
     tiles_searched = 0
 
-    while queue and tiles_searched < max_distance:
+    while queue:
+        if tiles_searched >= max_distance:
+            raise RuntimeError("Exceeded maximum search distance without finding path.")
+
         current_row, current_col = queue.popleft()
         tiles_searched += 1
 
@@ -86,5 +90,7 @@ def find_path_bfs(
                 return path
 
             queue.append(next_tile)
+
+    print(f"No path found to ({target_row}, {target_col}): queue exhausted.", file=sys.stderr)
 
     return None  # No path found within max_distance

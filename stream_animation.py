@@ -5,7 +5,7 @@ import random
 import glob
 from dungeon.animation import AssetManager
 from streaming import FFmpegStreamer
-from content import VideoProgram, TitleCard, DungeonWalk, VideoClip
+from content import VideoProgram, TitleCard, DungeonWalk, VideoClip, RandomChoiceContent
 
 
 def log(message: str) -> None:
@@ -15,14 +15,22 @@ def log(message: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--output', type=str, default='output.flv', help='File output')
-    parser.add_argument('--stdout', action='store_true', help='Output FLV to stdout for piping')
-    parser.add_argument('--rtmp', type=str, help='RTMP URL to stream to (e.g., rtmp://server/app/key)')
-    parser.add_argument('--width', type=int, default=1280)
-    parser.add_argument('--height', type=int, default=720)
-    parser.add_argument('--fps', type=int, default=30)
-    parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducibility')
-    parser.add_argument('--num-rooms', type=int, default=20, help='Number of rooms in dungeon')
+    parser.add_argument("--output", type=str, default="output.flv", help="File output")
+    parser.add_argument(
+        "--stdout", action="store_true", help="Output FLV to stdout for piping"
+    )
+    parser.add_argument(
+        "--rtmp", type=str, help="RTMP URL to stream to (e.g., rtmp://server/app/key)"
+    )
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducibility"
+    )
+    parser.add_argument(
+        "--num-rooms", type=int, default=15, help="Number of rooms in dungeon"
+    )
     args = parser.parse_args()
 
     # Set random seed if specif__d
@@ -31,9 +39,12 @@ def main():
         log(f"Using random seed: {args.seed}")
 
     # Validate arguments
-    num_outputs = sum([args.stdout, args.rtmp is not None, args.output != 'output.flv'])
+    num_outputs = sum([args.stdout, args.rtmp is not None, args.output != "output.flv"])
     if num_outputs > 1:
-        print("Error: Cannot specify multiple output targets (--stdout, --rtmp, --output)", file=sys.stderr)
+        print(
+            "Error: Cannot specify multiple output targets (--stdout, --rtmp, --output)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Load Assets
@@ -43,35 +54,35 @@ def main():
     except Exception as e:
         log(f"Error loading assets: {e}")
         return
- 
-    title_cards = [
-        os.path.join('assets', 'stills', 'title_card_youre_soaking_in_it.png'),
-        os.path.join('assets', 'stills', 'title_card_taste_the_quality.png'),
+
+    title_card_images = [
+        os.path.join("assets", "stills", "title_card_youre_soaking_in_it.png"),
+        os.path.join("assets", "stills", "title_card_taste_the_quality.png"),
     ]
 
     # Initialize Stream Loop
     video_program = VideoProgram()
-    
-    movie_videos = glob.glob(os.path.join('large_media', '*.mp4'))
+
+    movie_videos = glob.glob(os.path.join("large_media", "*.mp4"))
     random.shuffle(movie_videos)
 
-    title_card_songs = glob.glob(os.path.join('large_audio', '*.mp3'))
+    title_card_songs = glob.glob(os.path.join("large_audio", "*.mp3"))
     random.shuffle(title_card_songs)
 
-    # TODO: it's inefficent to build N dungeon walks when we have N videos.
-    # Instead, use a stack of videos inside of the Dungeon walk content.
-    for video_path in movie_videos:
-        title_image = title_cards.pop(0)
-        title_cards.append(title_image)  # Rotate title cards
-        
+    title_cards = []
+    for path in title_card_images:
         title_audio = title_card_songs.pop(0)
         title_card_songs.append(title_audio)  # Rotate title audios
+        title_cards.append(TitleCard(path, assets, title_audio, volume=0.2))
 
-        # TODO: renable title card and video clip once we've validated that dungeonwalk is working
-        video_program.add_content(TitleCard(title_image, assets, title_audio, volume=0.2), 30.0)
-        video_program.add_content(DungeonWalk(args.num_rooms, assets), 120.0)
-        video_program.add_content(VideoClip(video_path, 30, output_fps=args.fps), 20.0)
-     
+    random_title_card = RandomChoiceContent(title_cards)
+    random_video = RandomChoiceContent(
+        [VideoClip(video_path, 20, output_fps=args.fps) for video_path in movie_videos]
+    )
+
+    video_program.add_content(random_title_card, 30.0)
+    video_program.add_content(DungeonWalk(args.num_rooms, assets, random_video), 120.0)
+
     video_program.start()
 
     # Setup Streamer
@@ -83,8 +94,9 @@ def main():
         target = args.output
     audio_sample_rate = 44100
     audio_channels = 2
-    streamer = FFmpegStreamer(args.width, args.height, args.fps, target,
-                               audio_sample_rate, audio_channels)
+    streamer = FFmpegStreamer(
+        args.width, args.height, args.fps, target, audio_sample_rate, audio_channels
+    )
     streamer.start()
 
     # Audio samples needed per video frame
@@ -105,7 +117,9 @@ def main():
                 break
 
             # Get audio from content (or use silence if none available)
-            audio = video_program.get_audio(samples_per_frame, audio_sample_rate, audio_channels)
+            audio = video_program.get_audio(
+                samples_per_frame, audio_sample_rate, audio_channels
+            )
             if audio is not None:
                 if not streamer.write_audio(audio):
                     break
@@ -118,5 +132,6 @@ def main():
         log("Stopping stream...")
         streamer.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

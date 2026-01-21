@@ -44,6 +44,37 @@ class Content(ABC):
         By default, content never completes on its own (relies on duration).
         """
         return False
+    
+class RandomChoiceContent(Content):
+    """
+    Chooses randomly from a list of content options each time it is entered.
+    """
+    def __init__(self, options: List[Content]):
+        self.options = options
+        self.current_content: Optional[Content] = None
+
+    def enter(self) -> None:
+        self.current_content = random.choice(self.options)
+        self.current_content.enter()
+
+    def update(self, dt: float) -> None:
+        if self.current_content:
+            self.current_content.update(dt)
+
+    def render(self, width: int, height: int) -> Image:
+        if self.current_content:
+            return self.current_content.render(width, height)
+        return np.zeros((height, width, 3), np.uint8)
+
+    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+        if self.current_content:
+            return self.current_content.get_audio(num_samples, sample_rate, channels)
+        return None
+
+    def is_complete(self) -> bool:
+        if self.current_content:
+            return self.current_content.is_complete()
+        return False
 
 class TitleCard(Content):
     # TODO: get rid of the optional argument and always require audio, reorder the arguments to a more natural order
@@ -231,7 +262,7 @@ class CrashOverlay:
 
 
 class DungeonWalk(Content):
-    def __init__(self, num_rooms: int, assets: AssetManager):
+    def __init__(self, num_rooms: int, assets: AssetManager, goal_movie: Content):
         self.num_rooms = num_rooms
         self.assets = assets
         self.dungeon: Optional[Dungeon] = None
@@ -243,6 +274,10 @@ class DungeonWalk(Content):
         self.idle_time: float = 0.0
         self.idle_threshold: float = 3.0  # seconds before crash is triggered
         self.crash_overlay: Optional[CrashOverlay] = None
+        
+        self.goal_movie = goal_movie
+        self.playing_goal_movie: bool = False
+
 
     def enter(self) -> None:
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
@@ -251,9 +286,10 @@ class DungeonWalk(Content):
         self.background = create_dungeon_background(self.dungeon.map, self.assets)
         self.foreground = create_dungeon_foreground(self.dungeon.map, self.assets)
 
-        # Reset crash state
+        # Reset crash state and win state
         self.idle_time = 0.0
         self.crash_overlay = None
+        self.playing_goal_movie = False
 
     def update(self, dt: float) -> None:
         # If crash overlay is active, update it and skip hero updates
@@ -261,16 +297,27 @@ class DungeonWalk(Content):
             self.crash_overlay.update(dt)
             return
 
-        if self.hero and self.dungeon:
-            self.hero.update(dt, self.dungeon)
+        if self.playing_goal_movie:
+            self.goal_movie.update(dt)
+            return
 
-            # Track idle time for crash detection
-            if self.hero.state == 'idle':
-                self.idle_time += dt
-                if self.idle_time > self.idle_threshold:
-                    self._trigger_crash()
-            else:
-                self.idle_time = 0.0
+        if self.dungeon.is_on_goal(self.hero.x, self.hero.y):
+            print("DungeonWalk: Hero reached goal, starting goal movie...", file=sys.stderr)
+            self.goal_movie.enter()
+            self.playing_goal_movie = True
+            return
+
+        # Otherwise, update the dungeon
+        self.hero.update(dt, self.dungeon)
+
+        # Track idle time for crash detection
+        if self.hero.state == 'idle':
+            self.idle_time += dt
+            if self.idle_time > self.idle_threshold:
+                self._trigger_crash()
+        else:
+            self.idle_time = 0.0
+        
 
     def _trigger_crash(self) -> None:
         """Trigger crash overlay when hero is stuck."""
@@ -280,6 +327,9 @@ class DungeonWalk(Content):
         ])
 
     def render(self, width: int, height: int) -> Image:
+        if self.playing_goal_movie:
+            return self.goal_movie.render(width, height)
+
         # Render base dungeon frame
         if self.hero and self.background is not None:
             base_frame = render_frame_camera(self.background, self.assets, self.hero, width, height, self.foreground)
@@ -292,14 +342,21 @@ class DungeonWalk(Content):
 
         return base_frame
 
+    def get_audio(self, num_samples, sample_rate, channels):
+        if self.playing_goal_movie:
+            return self.goal_movie.get_audio(num_samples, sample_rate, channels)
+        
+        # TODO: dungeon should have it's own audio
+        return None
+
     def is_complete(self) -> bool:
+        if self.playing_goal_movie:
+            return self.goal_movie.is_complete()
+
         # Complete if crash overlay finished
         if self.crash_overlay and self.crash_overlay.is_complete():
             return True
 
-        # Existing goal completion logic
-        if self.hero and self.dungeon:
-            return self.dungeon.is_on_goal(self.hero.x, self.hero.y)
         return False
 
 class VideoClip(Content):
