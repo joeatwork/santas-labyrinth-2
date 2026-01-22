@@ -5,7 +5,7 @@ import random
 import glob
 from dungeon.animation import AssetManager
 from streaming import FFmpegStreamer
-from content import VideoProgram, TitleCard, DungeonWalk, VideoClip, RandomChoiceContent
+from content import AudioClip, VideoProgram, TitleCard, DungeonWalk, VideoClip, RandomChoiceContent
 
 
 def log(message: str) -> None:
@@ -73,15 +73,18 @@ def main():
     for path in title_card_images:
         title_audio = title_card_songs.pop(0)
         title_card_songs.append(title_audio)  # Rotate title audios
-        title_cards.append(TitleCard(path, assets, title_audio, volume=0.2))
+        title_cards.append(TitleCard(path, AudioClip(title_audio, 0.2)))
 
     random_title_card = RandomChoiceContent(title_cards)
     random_video = RandomChoiceContent(
         [VideoClip(video_path, 20, output_fps=args.fps) for video_path in movie_videos]
     )
 
+    dungeon_audio_file = os.path.join("assets", "dungeon_audio", "drones.mp3")
+    dungeon_audio = AudioClip(dungeon_audio_file, 0.3)
+
     video_program.add_content(random_title_card, 30.0)
-    video_program.add_content(DungeonWalk(args.num_rooms, assets, random_video), 120.0)
+    video_program.add_content(DungeonWalk(args.num_rooms, assets, random_video, dungeon_audio), 120.0)
 
     video_program.start()
 

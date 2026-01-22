@@ -76,64 +76,63 @@ class RandomChoiceContent(Content):
             return self.current_content.is_complete()
         return False
 
-class TitleCard(Content):
-    # TODO: get rid of the optional argument and always require audio, reorder the arguments to a more natural order
-    def __init__(self, image_path: str, asset_manager: AssetManager, audio_path: Optional[str] = None, volume: float = 1.0):
-        self.image_path = image_path
+class AudioClip:
+    """
+    Audio-only playback from a file. Not a Content subclass - designed to be
+    composed into other content types or used standalone for ambient audio.
+    """
+
+    def __init__(self, audio_path: str, volume: float = 1.0):
         self.audio_path = audio_path
         self.volume = volume
-        self.image = cv2.imread(image_path)
-        if self.image is None:
-            raise ValueError(f"Could not load title card image {image_path}")
+        self.audio_sample_rate: int = 44100
 
         # Audio state
-        self.audio_container: Optional[av.container.InputContainer] = None
+        self.container: Optional[av.container.InputContainer] = None
         self.audio_stream: Optional[av.stream.Stream] = None
         self.audio_resampler: Optional[av.audio.resampler.AudioResampler] = None
         self.audio_buffer: np.ndarray = np.zeros((0, 2), dtype=np.int16)
-        self.audio_sample_rate: int = 44100
-        self.audio_finished: bool = False
+        self.finished: bool = False
 
     def enter(self) -> None:
-        # Reset audio state
+        """Reset and open the audio file for playback from the beginning."""
         self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
-        self.audio_finished = False
+        self.finished = False
 
-        if self.audio_container is not None:
-            self.audio_container.close()
-            self.audio_container = None
-
-        if self.audio_path is None:
-            return
+        if self.container is not None:
+            self.container.close()
+            self.container = None
 
         try:
-            self.audio_container = av.open(self.audio_path)
+            self.container = av.open(self.audio_path)
         except Exception as e:
             print(f"Error: Could not open audio {self.audio_path}: {e}", file=sys.stderr)
-            self.audio_finished = True
+            self.finished = True
             return
 
-        # Get audio stream
-        audio_streams = [s for s in self.audio_container.streams if s.type == 'audio']
+        audio_streams = [s for s in self.container.streams if s.type == 'audio']
         if audio_streams:
             self.audio_stream = audio_streams[0]
-            # Create resampler to convert to output format (44100Hz stereo s16 planar)
             self.audio_resampler = av.audio.resampler.AudioResampler(
                 format='s16p',
                 layout='stereo',
                 rate=self.audio_sample_rate,
             )
-            print(f"TitleCard audio: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
+            print(f"AudioClip: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
         else:
-            raise ValueError("no audio stream in {self.audio_path}")
+            raise ValueError(f"no audio stream in {self.audio_path}")
+
+    # TODO: how do VideoClip and AudioClip ensure they don't lag?
+    def update(self, dt: float) -> None:
+        pass
 
     def _decode_audio(self) -> bool:
-        """Decode more audio into the buffer. Returns False if EOF reached or if the stream can't be read."""
-        if self.audio_container is None or self.audio_stream is None or self.audio_resampler is None:
+        """Decode more audio into the buffer. Returns False if EOF reached."""
+        if self.container is None or self.audio_stream is None or self.audio_resampler is None:
             return False
 
         try:
-            for packet in self.audio_container.demux(self.audio_stream):
+            for packet in self.container.demux(self.audio_stream):
                 for frame in packet.decode():
                     resampled = self.audio_resampler.resample(frame)
                     if resampled:
@@ -158,25 +157,15 @@ class TitleCard(Content):
             print(f"Error decoding audio: {e}", file=sys.stderr)
             return False
 
-    def update(self, dt: float) -> None:
-        pass
-
-    def render(self, width: int, height: int) -> Image:
-        if self.image is None:
-             return np.zeros((height, width, 3), np.uint8)
-
-        # Resize to fit stream dimensions
-        return cv2.resize(self.image, (width, height))
-
     def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
-        """Return audio samples for this frame."""
-        if self.audio_path is None or self.audio_finished:
+        """Return audio samples. Decodes more if buffer is running low."""
+        if self.finished:
             return None
 
         # Decode more audio if buffer is running low
-        while len(self.audio_buffer) < num_samples and not self.audio_finished:
+        while len(self.audio_buffer) < num_samples and not self.finished:
             if not self._decode_audio():
-                self.audio_finished = True
+                self.finished = True
                 break
 
         if len(self.audio_buffer) == 0:
@@ -199,10 +188,44 @@ class TitleCard(Content):
         return result
 
     def is_complete(self) -> bool:
+        """Returns True when audio playback has finished."""
+        return self.finished and len(self.audio_buffer) == 0
+
+
+class TitleCard(Content):
+    def __init__(self, image_path: str, audio: AudioClip):
+        self.image_path = image_path
+        self.image = cv2.imread(image_path)
+        if self.image is None:
+            raise ValueError(f"Could not load title card image {image_path}")
+
+        self.audio = audio
+
+    def enter(self) -> None:
+        if self.audio is not None:
+            self.audio.enter()
+
+    def update(self, dt: float) -> None:
+        pass
+
+    def render(self, width: int, height: int) -> Image:
+        if self.image is None:
+             return np.zeros((height, width, 3), np.uint8)
+
+        # Resize to fit stream dimensions
+        return cv2.resize(self.image, (width, height))
+
+    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+        """Return audio samples for this frame."""
+        if self.audio is None:
+            return None
+        return self.audio.get_audio(num_samples, sample_rate, channels)
+
+    def is_complete(self) -> bool:
         """Complete when audio finishes (if audio was provided)."""
-        if self.audio_path is None:
+        if self.audio is None:
             return False  # No audio, rely on duration
-        return self.audio_finished and len(self.audio_buffer) == 0
+        return self.audio.is_complete()
 
 class CrashOverlay:
     """
@@ -262,13 +285,14 @@ class CrashOverlay:
 
 
 class DungeonWalk(Content):
-    def __init__(self, num_rooms: int, assets: AssetManager, goal_movie: Content):
+    def __init__(self, num_rooms: int, assets: AssetManager, goal_movie: Content, ambient_audio: AudioClip):
         self.num_rooms = num_rooms
         self.assets = assets
         self.dungeon: Optional[Dungeon] = None
         self.hero: Optional[Hero] = None
         self.background: Optional[Image] = None
         self.foreground: Optional[Image] = None
+        self.ambient_audio = ambient_audio
 
         # Crash detection state
         self.idle_time: float = 0.0
@@ -291,15 +315,24 @@ class DungeonWalk(Content):
         self.crash_overlay = None
         self.playing_goal_movie = False
 
+        self.ambient_audio.enter()
+
     def update(self, dt: float) -> None:
+        if self.ambient_audio.is_complete():
+            self.ambient_audio.enter()
+
         # If crash overlay is active, update it and skip hero updates
         if self.crash_overlay:
+            # Keep playing audio if we crash
+            self.ambient_audio.update(dt)
             self.crash_overlay.update(dt)
             return
 
         if self.playing_goal_movie:
             self.goal_movie.update(dt)
             return
+
+        self.ambient_audio.update(dt)
 
         if self.dungeon.is_on_goal(self.hero.x, self.hero.y):
             print("DungeonWalk: Hero reached goal, starting goal movie...", file=sys.stderr)
@@ -346,8 +379,7 @@ class DungeonWalk(Content):
         if self.playing_goal_movie:
             return self.goal_movie.get_audio(num_samples, sample_rate, channels)
         
-        # TODO: dungeon should have it's own audio
-        return None
+        return self.ambient_audio.get_audio(num_samples, sample_rate, channels)
 
     def is_complete(self) -> bool:
         if self.playing_goal_movie:
@@ -365,8 +397,8 @@ class VideoClip(Content):
     Uses PyAV for decoding to get synchronized audio.
     """
 
-    def __init__(self, video_path: str, max_length_seconds: int, output_fps: float = 30.0):
-        self.video_path = video_path
+    def __init__(self, media_path: str, max_length_seconds: int, output_fps: float = 30.0):
+        self.media_path = media_path
         self.container: Optional[av.container.InputContainer] = None
         self.video_stream: Optional[av.stream.Stream] = None
         self.audio_stream: Optional[av.stream.Stream] = None
@@ -391,9 +423,9 @@ class VideoClip(Content):
             self.container.close()
 
         try:
-            self.container = av.open(self.video_path)
+            self.container = av.open(self.media_path)
         except Exception as e:
-            print(f"Error: Could not open video {self.video_path}: {e}", file=sys.stderr)
+            print(f"Error: Could not open video {self.media_path}: {e}", file=sys.stderr)
             return
 
         # Get video stream and read source fps
@@ -403,7 +435,7 @@ class VideoClip(Content):
             self.source_fps = float(self.video_stream.average_rate) if self.video_stream.average_rate else 30.0
             print(f"Video stream: {self.source_fps:.3f} fps source -> {self.output_fps:.3f} fps output", file=sys.stderr)
         else:
-            print(f"Warning: No video stream in {self.video_path}", file=sys.stderr)
+            print(f"No video stream in {self.media_path}", file=sys.stderr)
             self.video_stream = None
 
         # Get audio stream
@@ -419,12 +451,14 @@ class VideoClip(Content):
             )
             print(f"Audio stream: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
         else:
-            print(f"Warning: No audio stream in {self.video_path}", file=sys.stderr)
+            print(f"No audio stream in {self.media_path}", file=sys.stderr)
             self.audio_stream = None
             self.audio_resampler = None
 
         # Seek to random position for variety
-        if self.video_stream and self.container.duration:
+        # TODO: We'd like to allow constructors and callers some control over the starting offset,
+        # particularly if we're looping the same clip.
+        if self.container.duration:
             end_buffer_time = av.time_base * self.max_length_seconds
             if self.container.duration > end_buffer_time:
                 # Pick a random start point, leaving room for 30s of content
@@ -432,9 +466,9 @@ class VideoClip(Content):
                 start_pts = random.randint(0, max_start)
                 start_sec = start_pts / av.time_base
                 self.container.seek(start_pts)
-                print(f"Playing video {self.video_path} from {start_sec:.1f}s {start_pts}pts...", file=sys.stderr)
+                print(f"Playing media {self.media_path} from {start_sec:.1f}s {start_pts}pts...", file=sys.stderr)
             else:
-                print(f"Playing video {self.video_path} from start...", file=sys.stderr)
+                print(f"Playing media {self.media_path} from start...", file=sys.stderr)
 
         # Clear buffers and reset timing state
         self.current_frame = None
