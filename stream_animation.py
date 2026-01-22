@@ -80,7 +80,7 @@ def main():
     )
 
     dungeon_audio_file = os.path.join("assets", "dungeon_audio", "drones.mp3")
-    dungeon_audio = AudioClip(dungeon_audio_file, 0.3)
+    dungeon_audio = AudioClip(dungeon_audio_file, 0.2)
 
     video_program.add_content(random_title_card, 30.0)
     video_program.add_content(DungeonWalk(args.num_rooms, assets, random_video, dungeon_audio), 120.0)
