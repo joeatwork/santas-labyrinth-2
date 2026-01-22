@@ -29,11 +29,10 @@ def main():
         "--seed", type=int, default=None, help="Random seed for reproducibility"
     )
     parser.add_argument(
-        "--num-rooms", type=int, default=15, help="Number of rooms in dungeon"
+        "--num-rooms", type=int, default=20, help="Number of rooms in dungeon"
     )
     args = parser.parse_args()
 
-    # Set random seed if specif__d
     if args.seed is not None:
         random.seed(args.seed)
         log(f"Using random seed: {args.seed}")
@@ -77,7 +76,7 @@ def main():
 
     random_title_card = RandomChoiceContent(title_cards)
     random_video = RandomChoiceContent(
-        [VideoClip(video_path, 20, output_fps=args.fps) for video_path in movie_videos]
+        [VideoClip(video_path, 15, output_fps=args.fps) for video_path in movie_videos]
     )
 
     dungeon_audio_file = os.path.join("assets", "dungeon_audio", "drones.mp3")
