@@ -448,16 +448,17 @@ class DungeonWalk(Content):
         if goal is None:
             return ambient
 
-        # Calculate mix ratio based on distance to goal using inverse square law
-        # At goal (distance 0): goal_ratio = 0.5
-        # At mix_distance: goal_ratio = 0.25
-        # Formula: ratio = 0.5 / (1 + (distance/mix_distance)²)
         if self.dungeon is None or self.hero is None:
             return ambient
 
+        # TODO: still experimenting with sound attenuation functions
+        # I'd like the sound to be just *barely* audible a long way away,
+        # and then come up abruptly near the reference distance
         distance = self.dungeon.distance_to_goal(self.hero.x, self.hero.y)
-        normalized = distance / self.mix_distance
-        goal_ratio = 0.5 / (1.0 + normalized ** 2)
+        ref_distance = 512.0
+        rolloff = 5.0 # higher means faster fall-off
+        clamped = max(distance, ref_distance)
+        goal_ratio = 0.5 * (ref_distance / (ref_distance + rolloff * (clamped - ref_distance)))
 
         # Mix the audio
         mixed = ambient.astype(np.float32) + goal.astype(np.float32) * goal_ratio
