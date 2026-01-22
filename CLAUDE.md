@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## General Guidelines and Style
 
-We prefer to write unit tests and use them to validate new features and prevent regressions. Prefer simple tests that are short and easy to understand to exhaustive tests, it's ok to test a few cases rather than overcomplicate the tests.
+We prefer to write unit tests and use them to validate new features and prevent regressions. Prefer simple tests that are short and easy to understand to exhaustive tests, it's ok to test a few cases rather than overcomplicate the tests. Tests that test a single thing, or a few things, are preferred
+to tests with many asserts about different effects.
 
 In many cases, we prefer to fail with exceptions when inputs are nonsensical.
 
@@ -92,7 +93,8 @@ maze-like dungeon. The code below generates that dungeon.
 - `dungeon/dungeon_gen.py`: Procedural dungeon generation via organic room growth with door connections. Uses 11 pre-defined ASCII room templates. Algorithm: place initial room, queue open doors, iteratively attach compatible templates, replace unconnected doors with walls, place goal in last room, crop to bounding box.
 - `dungeon/pathfinding.py`: BFS pathfinding algorithm with configurable max_distance.
 - `dungeon/animation.py`: `AssetManager` (sprite loading) + rendering functions that convert world state to pixels.
-- `dungeon/world.py`: `Dungeon` class (world state) and `Hero` class (player character with navigation AI). The hero navigates toward the goal using door-based pathfinding with dead-end tracking to avoid re-exploring rooms with no exits.
+- `dungeon/world.py`: `Dungeon` class (world state) and `Hero` class (player character). Hero handles position, movement, and animation; navigation decisions are delegated to a Strategy object.
+- `dungeon/strategy.py`: Navigation strategies for mobs. Contains `Strategy` abstract base class and `GoalSeekingStrategy` (navigates toward goal using door-based pathfinding with dead-end tracking).
 
 ### Key Data Flow
 

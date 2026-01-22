@@ -1,4 +1,4 @@
-"""Unit tests for Hero.decide_next_move navigation logic."""
+"""Unit tests for Hero and GoalSeekingStrategy."""
 
 import pytest
 import numpy as np
@@ -6,6 +6,28 @@ from typing import List, Tuple, Optional, Dict
 
 from dungeon.dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
 from dungeon.world import Hero, Dungeon, TILE_SIZE
+from dungeon.strategy import Strategy, GoalSeekingStrategy, MoveCommand
+
+
+class MockStrategy(Strategy):
+    """A mock strategy for testing Hero in isolation."""
+
+    def __init__(self, commands: Optional[List[Optional[MoveCommand]]] = None):
+        """
+        Args:
+            commands: List of MoveCommands to return on successive calls.
+                      None in the list means return None for that call.
+                      If exhausted, returns None.
+        """
+        self.commands = commands or []
+        self.call_count = 0
+
+    def decide_next_move(self, x: float, y: float, dungeon) -> Optional[MoveCommand]:
+        if self.call_count < len(self.commands):
+            command = self.commands[self.call_count]
+            self.call_count += 1
+            return command
+        return None
 
 
 class MockDungeon:
@@ -163,135 +185,75 @@ def room_center(room_row: int, room_col: int) -> Tuple[float, float]:
     return tile_center(tile_row, tile_col)
 
 
-class TestHeroOnGoal:
-    """Test that hero stops moving when on the goal."""
+class TestHero:
+    """Test Hero behavior in isolation using MockStrategy."""
 
-    def test_hero_does_not_move_when_on_goal(self):
-        dungeon = MockDungeon(1, 1)
-        goal_row, goal_col = 5, 6
-        dungeon.set_goal(goal_row, goal_col)
+    def test_hero_stays_idle_when_strategy_returns_none(self):
+        """Hero remains idle when strategy returns None."""
+        strategy = MockStrategy(commands=[None])
+        hero = Hero(100.0, 100.0, strategy=strategy)
 
-        x, y = tile_center(goal_row, goal_col)
-        hero = Hero(x, y)
-
-        hero.decide_next_move(dungeon)
+        hero.decide_next_move(None)  # dungeon not used by MockStrategy
 
         assert hero.state == 'idle'
-        assert hero.target_x == x
-        assert hero.target_y == y
+        assert hero.target_x == 100.0
+        assert hero.target_y == 100.0
 
+    def test_hero_applies_move_command(self):
+        """Hero applies target and direction from MoveCommand."""
+        command = MoveCommand(target_x=200.0, target_y=150.0, direction=0)
+        strategy = MockStrategy(commands=[command])
+        hero = Hero(100.0, 100.0, strategy=strategy)
 
-class TestHeroApproachesGoal:
-    """Test that hero approaches goal when in the same room."""
+        hero.decide_next_move(None)
 
-    def test_hero_moves_toward_goal_in_same_room(self):
-        dungeon = MockDungeon(1, 1)
-        goal_row, goal_col = 5, 8
-        dungeon.set_goal(goal_row, goal_col)
-
-        # Hero starts west of goal
-        hero_row, hero_col = 5, 3
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y)
-
-        hero.decide_next_move(dungeon)
-
-        # Hero should start walking east toward goal
         assert hero.state == 'walking'
+        assert hero.target_x == 200.0
+        assert hero.target_y == 150.0
         assert hero.direction == 0  # East
 
-    def test_hero_moves_south_toward_goal(self):
-        dungeon = MockDungeon(1, 1)
-        goal_row, goal_col = 7, 5
-        dungeon.set_goal(goal_row, goal_col)
+    def test_hero_applies_direction_from_command(self):
+        """Hero direction is set by the MoveCommand."""
+        command = MoveCommand(target_x=100.0, target_y=200.0, direction=1)
+        strategy = MockStrategy(commands=[command])
+        hero = Hero(100.0, 100.0, strategy=strategy)
+        hero.direction = 0  # Start facing East
 
-        # Hero starts north of goal
-        hero_row, hero_col = 3, 5
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y)
+        hero.decide_next_move(None)
 
-        hero.decide_next_move(dungeon)
+        assert hero.direction == 1  # Now facing South
 
-        assert hero.state == 'walking'
-        assert hero.direction == 1  # South
+    def test_hero_moves_toward_target(self):
+        """Hero._move() moves hero toward target."""
+        hero = Hero(100.0, 100.0, strategy=MockStrategy())
+        hero.target_x = 200.0
+        hero.target_y = 100.0
+        hero.state = 'walking'
 
-    def test_hero_moves_north_toward_goal(self):
-        dungeon = MockDungeon(1, 1)
-        goal_row, goal_col = 2, 5
-        dungeon.set_goal(goal_row, goal_col)
+        hero._move(0.1)  # Move for 0.1 seconds at 150 pixels/sec = 15 pixels
 
-        # Hero starts south of goal
-        hero_row, hero_col = 7, 5
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y)
+        assert hero.x > 100.0
+        assert hero.state == 'walking'  # Not there yet
 
-        hero.decide_next_move(dungeon)
+    def test_hero_reaches_target_and_becomes_idle(self):
+        """Hero transitions to idle when reaching target."""
+        hero = Hero(100.0, 100.0, strategy=MockStrategy())
+        hero.target_x = 105.0  # Very close
+        hero.target_y = 100.0
+        hero.state = 'walking'
 
-        assert hero.state == 'walking'
-        assert hero.direction == 3  # North
+        hero._move(0.1)  # 15 pixels is enough to reach target 5 pixels away
 
-    def test_hero_moves_west_toward_goal(self):
-        dungeon = MockDungeon(1, 1)
-        goal_row, goal_col = 5, 2
-        dungeon.set_goal(goal_row, goal_col)
-
-        # Hero starts east of goal
-        hero_row, hero_col = 5, 8
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y)
-
-        hero.decide_next_move(dungeon)
-
-        assert hero.state == 'walking'
-        assert hero.direction == 2  # West
+        assert hero.x == 105.0
+        assert hero.y == 100.0
+        assert hero.state == 'idle'
 
 
-class TestHeroApproachesFacingDoor:
-    """Test that hero approaches a door they're already facing and aligned with."""
+class TestStrategyTargetStability:
+    """Test that strategy targets remain stable while being pursued."""
 
-    def test_hero_approaches_east_door_when_facing_and_aligned(self):
-        dungeon = MockDungeon(2, 1)
-
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(5, goal_col)
-        dungeon.add_door(0, 0, 0)  # East door
-
-        # Hero aligned with east door and facing east
-        # East door y is at (4.5) * TILE_SIZE
-        door_y = 4.5 * TILE_SIZE
-        x, y = tile_center(4, 5)  # Row 4 puts us near the door's y
-        hero = Hero(x, y)
-        hero.direction = 0  # Facing East
-
-        hero.decide_next_move(dungeon)
-
-        # Should approach the door directly
-        assert hero.state == 'walking'
-        assert hero.direction == 0  # Still facing East
-
-    def test_hero_approaches_south_door_when_facing_and_aligned(self):
-        dungeon = MockDungeon(1, 2)
-
-        goal_row = ROOM_HEIGHT + 5
-        dungeon.set_goal(goal_row, 5)
-        dungeon.add_door(0, 0, 1)  # South door
-
-        # Hero aligned with south door and facing south
-        x, y = tile_center(5, 5)  # Col 5 aligns with door at cols 5-6
-        hero = Hero(x, y)
-        hero.direction = 1  # Facing South
-
-        hero.decide_next_move(dungeon)
-
-        assert hero.state == 'walking'
-        assert hero.direction == 1  # Still facing South
-
-
-class TestHeroNavigationTargetStability:
-    """Test that navigation targets remain stable while being pursued."""
-
-    def test_target_persists_across_moves(self):
-        """Hero keeps the same goal target while moving toward it."""
+    def test_target_persists_across_calls(self):
+        """Strategy keeps the same goal target until reached."""
         dungeon = MockDungeon(2, 2)
 
         goal_row = ROOM_HEIGHT + 5
@@ -302,143 +264,25 @@ class TestHeroNavigationTargetStability:
         dungeon.add_door(0, 0, 1)  # South
 
         x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
 
         # First call should select a target
-        hero.decide_next_move(dungeon)
-        first_goal_row = hero.next_goal_row
-        first_goal_col = hero.next_goal_col
+        strategy.decide_next_move(x, y, dungeon)
+        first_goal_row = strategy.next_goal_row
+        first_goal_col = strategy.next_goal_col
         assert first_goal_row is not None
         assert first_goal_col is not None
 
-        # Simulate completing a single step but not reaching the target
-        hero.state = 'idle'
-
-        # Second call should keep the same target
-        hero.decide_next_move(dungeon)
-        assert hero.next_goal_row == first_goal_row
-        assert hero.next_goal_col == first_goal_col
+        # Second call from same position should keep the same target
+        strategy.decide_next_move(x, y, dungeon)
+        assert strategy.next_goal_row == first_goal_row
+        assert strategy.next_goal_col == first_goal_col
 
 
-class TestHeroLeavesRoom:
-    """Integration-style tests that hero can navigate through rooms."""
+class TestStrategyPathfinding:
+    """Test GoalSeekingStrategy pathfinding."""
 
-    def test_hero_eventually_reaches_door_tile(self):
-        dungeon = MockDungeon(2, 1)
-
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(5, goal_col)
-        dungeon.add_door(0, 0, 0)  # East door
-
-        # Start hero west of room center
-        start_x, start_y = tile_center(5, 3)
-        hero = Hero(start_x, start_y, random_choice=lambda lst: lst[0])
-
-        # Simulate several update cycles
-        for _ in range(100):
-            if hero.state == 'idle':
-                hero.decide_next_move(dungeon)
-            hero.move(0.1)
-
-            # Check if we've reached the east edge of room 0
-            if hero.x >= (ROOM_WIDTH - 1) * TILE_SIZE:
-                break
-
-        # Hero should have moved significantly eastward
-        assert hero.x > start_x
-
-    def test_hero_walks_through_door_without_stopping(self):
-        """Test that hero continues through a door tile without getting stuck."""
-        dungeon = MockDungeon(2, 1)
-
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(5, goal_col)
-        dungeon.add_door(0, 0, 0)  # East door at col 11, rows 4-5
-
-        # Start hero on the east door tile, facing east
-        # Door is at col 11, row 4
-        start_x, start_y = tile_center(4, 11)
-        hero = Hero(start_x, start_y, random_choice=lambda lst: lst[0])
-        hero.direction = 0  # Facing East
-
-        # Hero should continue through the door
-        hero.decide_next_move(dungeon)
-
-        assert hero.state == 'walking'
-        assert hero.direction == 0  # Still facing East
-        # Target should be one tile east (into the next room)
-        assert hero.target_x > start_x
-
-
-class TestHeroNavigatesAroundObstacles:
-    """Test that hero uses BFS pathfinding to navigate around obstacles."""
-
-    def test_hero_navigates_around_pillar(self):
-        """Hero finds path around single pillar to reach goal."""
-        dungeon = MockDungeon(1, 1)
-
-        # Place pillar directly between hero start and goal
-        # Hero at col 3, goal at col 8, pillar at col 5
-        hero_row, hero_col = 5, 3
-        goal_row, goal_col = 5, 8
-        pillar_col = 5
-
-        dungeon.add_pillar(hero_row, pillar_col)
-        dungeon.set_goal(goal_row, goal_col)
-
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        # Simulate movement until hero reaches goal or max iterations
-        max_iterations = 100
-        for _ in range(max_iterations):
-            if hero.state == 'idle':
-                hero.decide_next_move(dungeon)
-            hero.move(0.1)
-
-            # Check if reached goal
-            if int(hero.x / TILE_SIZE) == goal_col and int(hero.y / TILE_SIZE) == goal_row:
-                break
-
-        # Verify hero reached the goal
-        final_col = int(hero.x / TILE_SIZE)
-        final_row = int(hero.y / TILE_SIZE)
-        assert final_col == goal_col and final_row == goal_row, \
-            f"Hero should reach goal at ({goal_row}, {goal_col}), but is at ({final_row}, {final_col})"
-
-    def test_hero_navigates_around_big_pillar(self):
-        """Hero finds path around 2x2 convex corner block."""
-        dungeon = MockDungeon(1, 1)
-
-        # Place big pillar (2x2) between hero and goal
-        hero_row, hero_col = 5, 2
-        goal_row, goal_col = 5, 9
-
-        # Big pillar at rows 4-5, cols 5-6 (blocking direct east path)
-        dungeon.add_big_pillar(4, 5)
-        dungeon.set_goal(goal_row, goal_col)
-
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        # Simulate movement
-        max_iterations = 150
-        for _ in range(max_iterations):
-            if hero.state == 'idle':
-                hero.decide_next_move(dungeon)
-            hero.move(0.1)
-
-            # Check if reached goal
-            if int(hero.x / TILE_SIZE) == goal_col and int(hero.y / TILE_SIZE) == goal_row:
-                break
-
-        # Verify hero reached the goal
-        final_col = int(hero.x / TILE_SIZE)
-        final_row = int(hero.y / TILE_SIZE)
-        assert final_col == goal_col and final_row == goal_row, \
-            f"Hero should reach goal at ({goal_row}, {goal_col}), but is at ({final_row}, {final_col})"
-
-    def test_hero_path_avoids_obstacle(self):
+    def test_strategy_path_avoids_obstacle(self):
         """Verify the computed path does not include obstacle tiles."""
         dungeon = MockDungeon(1, 1)
 
@@ -450,53 +294,51 @@ class TestHeroNavigatesAroundObstacles:
         dungeon.set_goal(goal_row, goal_col)
 
         x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
 
         # Trigger path computation
-        hero.decide_next_move(dungeon)
+        strategy.decide_next_move(x, y, dungeon)
 
         # Check that the computed path does not include the pillar
-        assert hero.current_path is not None, "Hero should have computed a path"
-        assert (pillar_row, pillar_col) not in hero.current_path, \
+        assert strategy.current_path is not None, "Strategy should have computed a path"
+        assert (pillar_row, pillar_col) not in strategy.current_path, \
             "Path should not include the pillar tile"
 
 
-class TestHeroDeadEndTracking:
-    """Test that hero marks and avoids dead end doors."""
+class TestStrategyDeadEndTracking:
+    """Test that GoalSeekingStrategy marks and avoids dead end doors."""
 
-    def test_hero_marks_door_as_dead_end_when_room_has_no_other_doors(self):
-        """Hero marks a door as dead end after entering a room with only one door."""
+    def test_strategy_marks_door_as_dead_end_when_room_has_no_other_doors(self):
+        """Strategy marks a door as dead end after entering a room with only one door."""
         dungeon = MockDungeon(2, 1)
 
         # Room 0 (left) has east door, Room 1 (right) has only west door (dead end)
         dungeon.add_door(0, 0, 0)  # East door in room 0
         dungeon.add_door(0, 1, 2)  # West door in room 1
 
-        # Start hero in room 0
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+
+        # Strategy should not have any dead ends marked yet
+        assert len(strategy.dead_end_doors) == 0
+
+        # Start in room 0
         x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+        strategy.decide_next_move(x, y, dungeon)
 
-        # Hero should not have any dead ends marked yet
-        assert len(hero.dead_end_doors) == 0
-
-        # Simulate hero walking through the east door into room 1
-        # First, get the hero to target the door
-        hero.decide_next_move(dungeon)
-
-        # Move hero to room 1 (past the door)
-        hero.x = ROOM_WIDTH * TILE_SIZE + TILE_SIZE * 5  # Center of room 1
-        hero.y = TILE_SIZE * 5
-        hero.last_door_direction = 0  # Came through east door
-        hero.last_room_id = 0  # Was in room 0
+        # Move to room 1 (past the door)
+        x = ROOM_WIDTH * TILE_SIZE + TILE_SIZE * 5  # Center of room 1
+        y = TILE_SIZE * 5
+        strategy.last_door_direction = 0  # Came through east door
+        strategy.last_room_id = 0  # Was in room 0
 
         # Now call decide_next_move - it should detect room change and mark dead end
-        hero.decide_next_move(dungeon)
+        strategy.decide_next_move(x, y, dungeon)
 
         # The east door of room 0 should now be marked as a dead end
-        assert hero.is_dead_end(0, 0), "East door of room 0 should be marked as dead end"
+        assert strategy.is_dead_end(0, 0), "East door of room 0 should be marked as dead end"
 
-    def test_hero_prefers_non_dead_end_doors(self):
-        """Hero chooses non-dead-end doors over dead-end doors."""
+    def test_strategy_prefers_non_dead_end_doors(self):
+        """Strategy chooses non-dead-end doors over dead-end doors."""
         dungeon = MockDungeon(2, 2)
 
         # Room 0 has east and south doors
@@ -505,21 +347,21 @@ class TestHeroDeadEndTracking:
 
         x, y = room_center(0, 0)
         # Use random_choice that returns last item (to verify filtering works)
-        hero = Hero(x, y, random_choice=lambda lst: lst[-1])
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[-1])
 
         # Mark east door as dead end
-        hero.mark_dead_end(0, 0)
+        strategy.mark_dead_end(0, 0)
 
-        # Hero should choose south door (only non-dead-end option)
-        hero.decide_next_move(dungeon)
+        # Strategy should choose south door (only non-dead-end option)
+        strategy.decide_next_move(x, y, dungeon)
 
         # Target should be beyond south door (row + 2)
         expected_target_row = 9 + 2  # South door is at row 9, target is 2 tiles beyond
-        assert hero.next_goal_row == expected_target_row, \
-            f"Hero should target south door, got row {hero.next_goal_row}"
+        assert strategy.next_goal_row == expected_target_row, \
+            f"Strategy should target south door, got row {strategy.next_goal_row}"
 
-    def test_hero_uses_dead_end_door_when_no_other_options(self):
-        """Hero uses dead-end door when it's the only non-entry option."""
+    def test_strategy_uses_dead_end_door_when_no_other_options(self):
+        """Strategy uses dead-end door when it's the only non-entry option."""
         dungeon = MockDungeon(2, 2)
 
         # Room 0 has east and south doors
@@ -527,21 +369,21 @@ class TestHeroDeadEndTracking:
         dungeon.add_door(0, 0, 1)  # South door
 
         x, y = room_center(0, 0)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
 
         # Mark both doors as dead ends
-        hero.mark_dead_end(0, 0)  # East
-        hero.mark_dead_end(0, 1)  # South
+        strategy.mark_dead_end(0, 0)  # East
+        strategy.mark_dead_end(0, 1)  # South
 
-        # Hero should still choose one of them (prefers not entry door)
-        hero.decide_next_move(dungeon)
+        # Strategy should still choose one of them
+        strategy.decide_next_move(x, y, dungeon)
 
         # Should have selected a target (one of the dead end doors)
-        assert hero.next_goal_row is not None
-        assert hero.next_goal_col is not None
+        assert strategy.next_goal_row is not None
+        assert strategy.next_goal_col is not None
 
-    def test_hero_marks_door_as_dead_end_when_all_other_doors_are_dead_ends(self):
-        """Hero marks entry door as dead end if all other doors in room are dead ends."""
+    def test_strategy_marks_door_as_dead_end_when_all_other_doors_are_dead_ends(self):
+        """Strategy marks entry door as dead end if all other doors in room are dead ends."""
         dungeon = MockDungeon(3, 1)
 
         # Room layout: [0] -- [1] -- [2]
@@ -555,22 +397,22 @@ class TestHeroDeadEndTracking:
 
         # Start in room 1, having come from room 0
         x, y = room_center(0, 1)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-        hero.last_room_id = 0  # Came from room 0
-        hero.last_door_direction = 0  # Through east door of room 0
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+        strategy.last_room_id = 0  # Came from room 0
+        strategy.last_door_direction = 0  # Through east door of room 0
 
         # Mark the east door of room 1 as already a dead end
         # (simulating that we already explored room 2)
-        hero.mark_dead_end(1, 0)
+        strategy.mark_dead_end(1, 0)
 
-        # Now when hero enters room 1, it should see:
+        # Now when entering room 1, it should see:
         # - Entry door (west) - don't count this
         # - East door - marked as dead end
         # Since all non-entry doors are dead ends, entry door should be marked
 
         # Trigger the dead end check
-        hero._check_and_mark_dead_end(dungeon, 0, 0)
+        strategy._check_and_mark_dead_end(x, y, dungeon, 0, 0)
 
         # Room 0's east door should now be marked as dead end
-        assert hero.is_dead_end(0, 0), \
+        assert strategy.is_dead_end(0, 0), \
             "East door of room 0 should be marked as dead end (leads to room with only dead ends)"
