@@ -321,7 +321,7 @@ class DungeonWalk(Content):
         assets: AssetManager,
         goal_movie: Content,
         ambient_audio: AudioClip,
-        mix_distance: float = 2048.0,
+        mix_distance: float = 1024.0,
     ):
         self.num_rooms = num_rooms
         self.assets = assets
@@ -338,6 +338,8 @@ class DungeonWalk(Content):
 
         self.goal_movie = goal_movie
         self.playing_goal_movie: bool = False  # True when showing goal_movie video
+        self.goal_movie_time: float = 0.0  # Time spent playing goal movie
+        self.goal_movie_duration: float = 20.0  # Max seconds to play goal movie
 
         # Audio mixing: goal_movie audio fades in as hero approaches goal
         self.mix_distance = (
@@ -355,6 +357,7 @@ class DungeonWalk(Content):
         self.idle_time = 0.0
         self.crash_overlay = None
         self.playing_goal_movie = False
+        self.goal_movie_time = 0.0
 
         self.ambient_audio.enter()
 
@@ -374,6 +377,7 @@ class DungeonWalk(Content):
 
         if self.playing_goal_movie:
             self.goal_movie.update(dt)
+            self.goal_movie_time += dt
             return
 
         self.ambient_audio.update(dt)
@@ -444,20 +448,16 @@ class DungeonWalk(Content):
         if goal is None:
             return ambient
 
-        # Calculate mix ratio based on distance to goal
-        # At mix_distance or further: 100% ambient, 0% goal
-        # At goal (distance 0): 0% ambient, 100% goal
+        # Calculate mix ratio based on distance to goal using inverse square law
+        # At goal (distance 0): goal_ratio = 0.5
+        # At mix_distance: goal_ratio = 0.25
+        # Formula: ratio = 0.5 / (1 + (distance/mix_distance)²)
         if self.dungeon is None or self.hero is None:
             return ambient
 
         distance = self.dungeon.distance_to_goal(self.hero.x, self.hero.y)
-        if distance >= self.mix_distance:
-            goal_ratio = 0.0
-        else:
-            # Inverse square falloff: sound drops off quickly as you move away
-            # At distance 0: ratio = 0.5, at mix_distance: ratio = 0
-            normalized = distance / self.mix_distance
-            goal_ratio = 0.75 * (1.0 - normalized) ** 2
+        normalized = distance / self.mix_distance
+        goal_ratio = 0.5 / (1.0 + normalized ** 2)
 
         # Mix the audio
         mixed = ambient.astype(np.float32) + goal.astype(np.float32) * goal_ratio
@@ -465,7 +465,7 @@ class DungeonWalk(Content):
 
     def is_complete(self) -> bool:
         if self.playing_goal_movie:
-            return self.goal_movie.is_complete()
+            return self.goal_movie_time >= self.goal_movie_duration
 
         # Complete if crash overlay finished
         if self.crash_overlay and self.crash_overlay.is_complete():
@@ -480,6 +480,8 @@ class VideoClip(Content):
     Uses PyAV for decoding to get synchronized audio.
     """
 
+    # TODO: max_length_seconds doesn't actually limit the playback length, and we rely on this in DungeonWalk.
+    # We should probably figure out how to deal with is_complete instead of using max_duration at all.
     def __init__(
         self, media_path: str, max_length_seconds: int, output_fps: float = 30.0
     ):
