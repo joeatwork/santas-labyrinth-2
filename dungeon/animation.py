@@ -6,6 +6,9 @@ from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dunge
 from typing import Dict, Any, Optional, Tuple, Protocol
 
 
+# TODO: this module should probably be named something like dungeon_renderer rather
+# than "animation"
+
 class HeroLike(Protocol):
     """Protocol for hero-like objects that can be rendered."""
     x: float
@@ -38,7 +41,7 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     # Door flooring
     "north_door_floor": {'x': 192, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
     "south_door_floor": {'x': 128, 'y': 640, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
-    "west_door_floor": {'x': 640, 'y': 120, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
+    "west_door_floor": {'x': 640, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
     "east_door_floor": {'x': 640, 'y': 192, 'w': 64, 'h': 64, 'file': 'sprites/death_mountain_paradigm_room.png'},
 
     # Pillar
