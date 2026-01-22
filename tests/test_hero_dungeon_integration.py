@@ -3,7 +3,7 @@
 import pytest
 import random
 import numpy as np
-from world import Hero, Dungeon, TILE_SIZE
+from dungeon.world import Hero, Dungeon, TILE_SIZE
 
 
 def run_hero_to_goal(dungeon: Dungeon, max_steps: int = 10000, dt: float = 0.1) -> tuple[bool, int, str]:

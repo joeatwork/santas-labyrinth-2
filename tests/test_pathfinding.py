@@ -87,19 +87,17 @@ class TestFindPathBfs:
         assert path is None
 
     def test_respects_max_distance(self):
-        """BFS stops searching after max_distance tiles."""
+        """BFS raises RuntimeError when max_distance tiles are searched without finding path."""
         is_walkable = make_walkability_checker(set(), rows=100, cols=100)
 
         # Target is far away, but max_distance is small
-        path = find_path_bfs(
-            start_row=0, start_col=0,
-            target_row=50, target_col=50,
-            is_walkable_tile=is_walkable,
-            max_distance=10,  # Very small limit
-        )
-
-        # Should not find path within the limit
-        assert path is None
+        with pytest.raises(RuntimeError, match="Exceeded maximum search distance"):
+            find_path_bfs(
+                start_row=0, start_col=0,
+                target_row=50, target_col=50,
+                is_walkable_tile=is_walkable,
+                max_distance=10,  # Very small limit
+            )
 
     def test_empty_path_when_already_at_target(self):
         """BFS returns empty list when start == target."""

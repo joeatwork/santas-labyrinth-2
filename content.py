@@ -14,7 +14,7 @@ from dungeon.animation import (
     create_dungeon_foreground,
     render_frame_camera,
 )
-from world import Dungeon, Hero
+from dungeon.world import Dungeon, Hero
 
 
 class Content(ABC):

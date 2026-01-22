@@ -17,6 +17,8 @@ with little effort.
 Prefer data classes to naked tuples for arguments and return values when not
 doing pure mathematics.
 
+We prefer small modules with clear boundaries to large python modules. Modules should use well defined, clear types to call one another.
+
 ## Development Commands
 
 This project uses `uv` for Python package management and execution:
@@ -90,7 +92,7 @@ maze-like dungeon. The code below generates that dungeon.
 - `dungeon/dungeon_gen.py`: Procedural dungeon generation via organic room growth with door connections. Uses 11 pre-defined ASCII room templates. Algorithm: place initial room, queue open doors, iteratively attach compatible templates, replace unconnected doors with walls, place goal in last room, crop to bounding box.
 - `dungeon/pathfinding.py`: BFS pathfinding algorithm with configurable max_distance.
 - `dungeon/animation.py`: `AssetManager` (sprite loading) + rendering functions that convert world state to pixels.
-- `world.py`: `Dungeon` class (world state) and `Hero` class (player character with navigation AI). The hero navigates toward the goal using door-based pathfinding with dead-end tracking to avoid re-exploring rooms with no exits.
+- `dungeon/world.py`: `Dungeon` class (world state) and `Hero` class (player character with navigation AI). The hero navigates toward the goal using door-based pathfinding with dead-end tracking to avoid re-exploring rooms with no exits.
 
 ### Key Data Flow
 
@@ -135,9 +137,9 @@ Test files:
 ## Code TODOs
 
 The following TODOs exist in the codebase:
-- `world.py`: `find_goal_position()` returns pixel position but should return tile position
-- `world.py`: Door tuples should use data classes
-- `world.py`: `get_room_id()` called with pixel positions instead of tile positions in some places
+- `dungeon/world.py`: `find_goal_position()` returns pixel position but should return tile position
+- `dungeon/world.py`: Door tuples should use data classes
+- `dungeon/world.py`: `get_room_id()` called with pixel positions instead of tile positions in some places
 - `dungeon/dungeon_gen.py`: Tile class mixes logical tiles with rendering details (should be separate types)
 - `dungeon/dungeon_gen.py`: Foreground generation should not be in dungeon_gen.py
 - `dungeon/animation.py`: AssetManager should be in its own module (used by non-dungeon code)

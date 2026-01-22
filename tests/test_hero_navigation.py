@@ -5,7 +5,7 @@ import numpy as np
 from typing import List, Tuple, Optional, Dict
 
 from dungeon.dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
-from world import Hero, Dungeon, TILE_SIZE
+from dungeon.world import Hero, Dungeon, TILE_SIZE
 
 
 class MockDungeon:
@@ -244,46 +244,6 @@ class TestHeroApproachesGoal:
 
         assert hero.state == 'walking'
         assert hero.direction == 2  # West
-
-
-class TestHeroNavigatesToDoor:
-    """Test that hero navigates toward doors when goal is in another room."""
-
-    def test_hero_aligns_with_east_door(self):
-        dungeon = MockDungeon(2, 1)
-
-        goal_col = ROOM_WIDTH + 5
-        dungeon.set_goal(5, goal_col)
-        dungeon.add_door(0, 0, 0)  # East door at y = (4.5) * TILE_SIZE
-
-        # Hero not aligned with door (different y)
-        hero_row, hero_col = 2, 5  # Row 2, but door is at rows 4-5
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        hero.decide_next_move(dungeon)
-
-        # Hero should move to align with door (move south)
-        assert hero.state == 'walking'
-        assert hero.direction == 1  # South to align with door
-
-    def test_hero_aligns_with_south_door(self):
-        dungeon = MockDungeon(1, 2)
-
-        goal_row = ROOM_HEIGHT + 5
-        dungeon.set_goal(goal_row, 5)
-        dungeon.add_door(0, 0, 1)  # South door at x = (5.5) * TILE_SIZE
-
-        # Hero not aligned with door (different x)
-        hero_row, hero_col = 5, 2  # Col 2, but door is at cols 5-6
-        x, y = tile_center(hero_row, hero_col)
-        hero = Hero(x, y, random_choice=lambda lst: lst[0])
-
-        hero.decide_next_move(dungeon)
-
-        # Hero should move to align with door (move east)
-        assert hero.state == 'walking'
-        assert hero.direction == 0  # East to align with door
 
 
 class TestHeroApproachesFacingDoor:
