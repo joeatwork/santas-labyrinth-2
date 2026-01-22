@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## General Guidelines and Style
 
+We prefer type checking. Some code does not type check, but we'd like to update that code
+as we work. New code should make an effort to type check.
+
 We prefer to write unit tests and use them to validate new features and prevent regressions. Prefer simple tests that are short and easy to understand to exhaustive tests, it's ok to test a few cases rather than overcomplicate the tests. Tests that test a single thing, or a few things, are preferred
 to tests with many asserts about different effects.
 

@@ -292,6 +292,15 @@ ROOM_TEMPLATES: List[RoomTemplate] = [
         ],
     ),
     RoomTemplate(
+        name="long-east-west",
+        ascii_art=[
+            "1---*------------*---2",
+            "w....................e",
+            "W....................E",
+            "3____________________4",
+        ],
+    ),
+    RoomTemplate(
         name="north-south",
         ascii_art=[
             "1nN2",

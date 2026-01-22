@@ -3,7 +3,10 @@ import os
 import sys
 import numpy as np
 from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
-from typing import Dict, Any, Optional, Tuple, Protocol
+from typing import Dict, Any, Optional, Tuple, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from dungeon.npc import NPC
 
 
 # TODO: this module should probably be named something like dungeon_renderer rather
@@ -90,6 +93,22 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     # East
     'hero_east_0': {'x': 576, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
     'hero_east_1': {'x': 640, 'y': 0, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+
+    # NPC sprites and walk cycles
+    'npc_default': {'x': 0, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+
+    # South
+    'npc_south_0': {'x': 192, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'npc_south_1': {'x': 256, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # North
+    'npc_north_0': {'x': 320, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'npc_north_1': {'x': 384, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # West
+    'npc_west_0': {'x': 448, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'npc_west_1': {'x': 512, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    # East
+    'npc_east_0': {'x': 576, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+    'npc_east_1': {'x': 640, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
 }
 
 # Static lookup for hero sprites: [direction][frame]
@@ -335,3 +354,26 @@ def render_frame_camera(bg_image: Image, assets: AssetManager, hero: HeroLike, v
             overlay_image(frame, fg_crop, 0, 0)
 
     return frame
+
+
+def render_npc(
+    frame: Image,
+    npc: 'NPC',
+    assets: AssetManager,
+    cam_x: int,
+    cam_y: int,
+) -> None:
+    """
+    Render an NPC on the frame.
+
+    Supports variable sprite sizes via npc.sprite_width and npc.sprite_height.
+    """
+    # Center sprite on NPC position
+    npc_screen_x = int(npc.x - cam_x - npc.sprite_width / 2)
+    npc_screen_y = int(npc.y - cam_y - npc.sprite_height / 2)
+
+    try:
+        sprite = assets.get_sprite(npc.sprite_name)
+        overlay_image(frame, sprite, npc_screen_x, npc_screen_y)
+    except KeyError:
+        pass  # Sprite not found

@@ -192,8 +192,9 @@ class TestHero:
         """Hero remains idle when strategy returns None."""
         strategy = MockStrategy(commands=[None])
         hero = Hero(100.0, 100.0, strategy=strategy)
+        dungeon = MockDungeon()
 
-        hero.decide_next_move(None)  # dungeon not used by MockStrategy
+        hero.update(0.0, dungeon)
 
         assert hero.state == 'idle'
         assert hero.target_x == 100.0
@@ -204,8 +205,9 @@ class TestHero:
         command = MoveCommand(target_x=200.0, target_y=150.0, direction=0)
         strategy = MockStrategy(commands=[command])
         hero = Hero(100.0, 100.0, strategy=strategy)
+        dungeon = MockDungeon()
 
-        hero.decide_next_move(None)
+        hero.update(0.0, dungeon)
 
         assert hero.state == 'walking'
         assert hero.target_x == 200.0
@@ -218,8 +220,9 @@ class TestHero:
         strategy = MockStrategy(commands=[command])
         hero = Hero(100.0, 100.0, strategy=strategy)
         hero.direction = 0  # Start facing East
+        dungeon = MockDungeon()
 
-        hero.decide_next_move(None)
+        hero.update(0.0, dungeon)
 
         assert hero.direction == 1  # Now facing South
 

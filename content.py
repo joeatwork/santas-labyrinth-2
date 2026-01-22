@@ -10,11 +10,14 @@ from PIL import Image as PILImage, ImageDraw, ImageFont
 from dungeon.animation import (
     AssetManager,
     Image,
+    TILE_SIZE,
     create_dungeon_background,
     create_dungeon_foreground,
     render_frame_camera,
+    render_npc,
 )
 from dungeon.world import Dungeon, Hero
+from dungeon.conversation_overlay import ConversationOverlay
 
 
 class Content(ABC):
@@ -346,6 +349,9 @@ class DungeonWalk(Content):
             mix_distance  # Distance in pixels at which goal audio starts mixing in
         )
 
+        # Conversation state
+        self.conversation_overlay: Optional[ConversationOverlay] = None
+
     def enter(self) -> None:
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
         self.dungeon = Dungeon(self.num_rooms)
@@ -353,9 +359,10 @@ class DungeonWalk(Content):
         self.background = create_dungeon_background(self.dungeon.map, self.assets)
         self.foreground = create_dungeon_foreground(self.dungeon.map, self.assets)
 
-        # Reset crash state and win state
+        # Reset crash state, win state, and conversation state
         self.idle_time = 0.0
         self.crash_overlay = None
+        self.conversation_overlay = None
         self.playing_goal_movie = False
         self.goal_movie_time = 0.0
 
@@ -367,6 +374,16 @@ class DungeonWalk(Content):
     def update(self, dt: float) -> None:
         if self.ambient_audio.is_complete():
             self.ambient_audio.enter()
+
+        # If conversation is active, update it and skip hero movement
+        if self.conversation_overlay:
+            self.ambient_audio.update(dt)
+            self.conversation_overlay.update(dt)
+            if self.conversation_overlay.is_complete():
+                self.conversation_overlay = None
+                if self.hero:
+                    self.hero.end_conversation()
+            return
 
         # If crash overlay is active, update it and skip hero updates
         if self.crash_overlay:
@@ -396,16 +413,25 @@ class DungeonWalk(Content):
             self.playing_goal_movie = True
             return
 
-        # Otherwise, update the dungeon
-        self.hero.update(dt, self.dungeon)
+        # Update hero - may return InteractCommand if strategy wants to talk
+        if self.hero and self.dungeon:
+            interact_cmd = self.hero.update(dt, self.dungeon)
+            if interact_cmd is not None:
+                # Hero entered 'talking' state, start conversation overlay
+                if interact_cmd.npc.conversation_engine is not None:
+                    self.conversation_overlay = ConversationOverlay(
+                        interact_cmd.npc.conversation_engine
+                    )
+                    self.conversation_overlay.enter()
+                return
 
-        # Track idle time for crash detection
-        if self.hero.state == "idle":
-            self.idle_time += dt
-            if self.idle_time > self.idle_threshold:
-                self._trigger_crash()
-        else:
-            self.idle_time = 0.0
+            # Track idle time for crash detection
+            if self.hero.state == "idle":
+                self.idle_time += dt
+                if self.idle_time > self.idle_threshold:
+                    self._trigger_crash()
+            else:
+                self.idle_time = 0.0
 
     def _trigger_crash(self) -> None:
         """Trigger crash overlay when hero is stuck."""
@@ -416,13 +442,33 @@ class DungeonWalk(Content):
         if self.playing_goal_movie:
             return self.goal_movie.render(width, height)
 
-        # Render base dungeon frame
-        if self.hero and self.background is not None:
+        # Render base dungeon frame (without foreground - we'll add it after NPCs)
+        if self.hero and self.background is not None and self.dungeon is not None:
+            # Calculate camera position for NPC rendering
+            cam_x = int(self.hero.x - width / 2)
+            cam_y = int(self.hero.y - height / 2)
+
+            # Clamp camera to map bounds
+            map_h, map_w = self.background.shape[:2]
+            cam_x = max(0, min(cam_x, map_w - width))
+            cam_y = max(0, min(cam_y, map_h - height))
+
+            # Render base frame with hero and foreground
             base_frame = render_frame_camera(
                 self.background, self.assets, self.hero, width, height, self.foreground
             )
+
+            # Render NPCs (drawn on top of hero but under foreground)
+            # Note: For proper layering, NPCs should be rendered before foreground
+            # but render_frame_camera already applies foreground. This is a simplification.
+            for npc in self.dungeon.npcs:
+                render_npc(base_frame, npc, self.assets, cam_x, cam_y)
         else:
             base_frame = np.zeros((height, width, 3), np.uint8)
+
+        # Overlay conversation box if active
+        if self.conversation_overlay:
+            return self.conversation_overlay.render(base_frame, width, height)
 
         # Overlay crash box if active
         if self.crash_overlay:
