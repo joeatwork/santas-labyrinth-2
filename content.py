@@ -7,14 +7,22 @@ from abc import ABC, abstractmethod
 from typing import Tuple, List, Optional, Any
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
-from dungeon.animation import AssetManager, Image, create_dungeon_background, create_dungeon_foreground, render_frame_camera
+from dungeon.animation import (
+    AssetManager,
+    Image,
+    create_dungeon_background,
+    create_dungeon_foreground,
+    render_frame_camera,
+)
 from world import Dungeon, Hero
+
 
 class Content(ABC):
     """
     A unit of Content is a scene or segment that can be streamed. Callers can organize and select different units of Content
     over time.
     """
+
     @abstractmethod
     def enter(self) -> None:
         """Called when this content becomes active."""
@@ -30,7 +38,9 @@ class Content(ABC):
         """Render frame."""
         pass
 
-    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         """
         Get audio samples for the current frame.
         Returns None if no audio is available (silence will be used).
@@ -44,11 +54,13 @@ class Content(ABC):
         By default, content never completes on its own (relies on duration).
         """
         return False
-    
+
+
 class RandomChoiceContent(Content):
     """
     Chooses randomly from a list of content options each time it is entered.
     """
+
     def __init__(self, options: List[Content]):
         self.options = options
         self.current_content: Optional[Content] = None
@@ -66,7 +78,9 @@ class RandomChoiceContent(Content):
             return self.current_content.render(width, height)
         return np.zeros((height, width, 3), np.uint8)
 
-    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         if self.current_content:
             return self.current_content.get_audio(num_samples, sample_rate, channels)
         return None
@@ -75,6 +89,7 @@ class RandomChoiceContent(Content):
         if self.current_content:
             return self.current_content.is_complete()
         return False
+
 
 class AudioClip:
     """
@@ -106,19 +121,24 @@ class AudioClip:
         try:
             self.container = av.open(self.audio_path)
         except Exception as e:
-            print(f"Error: Could not open audio {self.audio_path}: {e}", file=sys.stderr)
+            print(
+                f"Error: Could not open audio {self.audio_path}: {e}", file=sys.stderr
+            )
             self.finished = True
             return
 
-        audio_streams = [s for s in self.container.streams if s.type == 'audio']
+        audio_streams = [s for s in self.container.streams if s.type == "audio"]
         if audio_streams:
             self.audio_stream = audio_streams[0]
             self.audio_resampler = av.audio.resampler.AudioResampler(
-                format='s16p',
-                layout='stereo',
+                format="s16p",
+                layout="stereo",
                 rate=self.audio_sample_rate,
             )
-            print(f"AudioClip: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
+            print(
+                f"AudioClip: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo",
+                file=sys.stderr,
+            )
         else:
             raise ValueError(f"no audio stream in {self.audio_path}")
 
@@ -128,7 +148,11 @@ class AudioClip:
 
     def _decode_audio(self) -> bool:
         """Decode more audio into the buffer. Returns False if EOF reached."""
-        if self.container is None or self.audio_stream is None or self.audio_resampler is None:
+        if (
+            self.container is None
+            or self.audio_stream is None
+            or self.audio_resampler is None
+        ):
             return False
 
         try:
@@ -157,7 +181,9 @@ class AudioClip:
             print(f"Error decoding audio: {e}", file=sys.stderr)
             return False
 
-    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         """Return audio samples. Decodes more if buffer is running low."""
         if self.finished:
             return None
@@ -174,7 +200,7 @@ class AudioClip:
         if len(self.audio_buffer) < num_samples:
             # Return what we have padded with silence (final chunk)
             result = np.zeros((num_samples, channels), dtype=np.int16)
-            result[:len(self.audio_buffer)] = self.audio_buffer[:, :channels]
+            result[: len(self.audio_buffer)] = self.audio_buffer[:, :channels]
             self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
         else:
             # Return requested samples and keep the rest buffered
@@ -210,12 +236,14 @@ class TitleCard(Content):
 
     def render(self, width: int, height: int) -> Image:
         if self.image is None:
-             return np.zeros((height, width, 3), np.uint8)
+            return np.zeros((height, width, 3), np.uint8)
 
         # Resize to fit stream dimensions
         return cv2.resize(self.image, (width, height))
 
-    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         """Return audio samples for this frame."""
         if self.audio is None:
             return None
@@ -227,11 +255,13 @@ class TitleCard(Content):
             return False  # No audio, rely on duration
         return self.audio.is_complete()
 
+
 class CrashOverlay:
     """
     Renders a white box overlay with dynamic text lines.
     Used to display crash/error messages on top of content.
     """
+
     def __init__(self, text_lines: List[str], duration: float = 10.0):
         self.text_lines = text_lines
         self.elapsed: float = 0.0
@@ -259,9 +289,9 @@ class CrashOverlay:
         # Draw white box with black border
         draw.rectangle(
             [box_x, box_y, box_x + box_width, box_y + box_height],
-            fill='white',
-            outline='black',
-            width=3
+            fill="white",
+            outline="black",
+            width=3,
         )
 
         # Load a font (use default if no specific font available)
@@ -276,7 +306,7 @@ class CrashOverlay:
             bbox = draw.textbbox((0, 0), line, font=font)
             text_width = bbox[2] - bbox[0]
             text_x = box_x + (box_width - text_width) // 2
-            draw.text((text_x, text_y), line, fill='black', font=font)
+            draw.text((text_x, text_y), line, fill="black", font=font)
             text_y += 35
 
         # Convert back to BGR numpy array
@@ -285,7 +315,14 @@ class CrashOverlay:
 
 
 class DungeonWalk(Content):
-    def __init__(self, num_rooms: int, assets: AssetManager, goal_movie: Content, ambient_audio: AudioClip):
+    def __init__(
+        self,
+        num_rooms: int,
+        assets: AssetManager,
+        goal_movie: Content,
+        ambient_audio: AudioClip,
+        mix_distance: float = 2048.0,
+    ):
         self.num_rooms = num_rooms
         self.assets = assets
         self.dungeon: Optional[Dungeon] = None
@@ -298,10 +335,14 @@ class DungeonWalk(Content):
         self.idle_time: float = 0.0
         self.idle_threshold: float = 3.0  # seconds before crash is triggered
         self.crash_overlay: Optional[CrashOverlay] = None
-        
-        self.goal_movie = goal_movie
-        self.playing_goal_movie: bool = False
 
+        self.goal_movie = goal_movie
+        self.playing_goal_movie: bool = False  # True when showing goal_movie video
+
+        # Audio mixing: goal_movie audio fades in as hero approaches goal
+        self.mix_distance = (
+            mix_distance  # Distance in pixels at which goal audio starts mixing in
+        )
 
     def enter(self) -> None:
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
@@ -316,6 +357,9 @@ class DungeonWalk(Content):
         self.playing_goal_movie = False
 
         self.ambient_audio.enter()
+
+        # Start goal_movie immediately for audio mixing
+        self.goal_movie.enter()
 
     def update(self, dt: float) -> None:
         if self.ambient_audio.is_complete():
@@ -333,10 +377,18 @@ class DungeonWalk(Content):
             return
 
         self.ambient_audio.update(dt)
+        self.goal_movie.update(dt)
+
+        # Loop goal_movie if it completes before hero reaches goal
+        if self.goal_movie.is_complete():
+            self.goal_movie.enter()
 
         if self.dungeon.is_on_goal(self.hero.x, self.hero.y):
-            print("DungeonWalk: Hero reached goal, starting goal movie...", file=sys.stderr)
-            self.goal_movie.enter()
+            print(
+                "DungeonWalk: Hero reached goal, switching to goal movie video...",
+                file=sys.stderr,
+            )
+            # Don't re-enter goal_movie - keep audio playing uninterrupted
             self.playing_goal_movie = True
             return
 
@@ -344,20 +396,17 @@ class DungeonWalk(Content):
         self.hero.update(dt, self.dungeon)
 
         # Track idle time for crash detection
-        if self.hero.state == 'idle':
+        if self.hero.state == "idle":
             self.idle_time += dt
             if self.idle_time > self.idle_threshold:
                 self._trigger_crash()
         else:
             self.idle_time = 0.0
-        
 
     def _trigger_crash(self) -> None:
         """Trigger crash overlay when hero is stuck."""
         print("DungeonWalk: Hero crash detected, showing overlay...", file=sys.stderr)
-        self.crash_overlay = CrashOverlay([
-            "robot crash detected ... rebooting ..."
-        ])
+        self.crash_overlay = CrashOverlay(["robot crash detected ... rebooting ..."])
 
     def render(self, width: int, height: int) -> Image:
         if self.playing_goal_movie:
@@ -365,7 +414,9 @@ class DungeonWalk(Content):
 
         # Render base dungeon frame
         if self.hero and self.background is not None:
-            base_frame = render_frame_camera(self.background, self.assets, self.hero, width, height, self.foreground)
+            base_frame = render_frame_camera(
+                self.background, self.assets, self.hero, width, height, self.foreground
+            )
         else:
             base_frame = np.zeros((height, width, 3), np.uint8)
 
@@ -375,11 +426,42 @@ class DungeonWalk(Content):
 
         return base_frame
 
-    def get_audio(self, num_samples, sample_rate, channels):
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         if self.playing_goal_movie:
             return self.goal_movie.get_audio(num_samples, sample_rate, channels)
-        
-        return self.ambient_audio.get_audio(num_samples, sample_rate, channels)
+
+        # Get both audio sources
+        ambient = self.ambient_audio.get_audio(num_samples, sample_rate, channels)
+        goal = self.goal_movie.get_audio(num_samples, sample_rate, channels)
+
+        # If only one source has audio, return that
+        if ambient is None and goal is None:
+            return None
+        if ambient is None:
+            return goal
+        if goal is None:
+            return ambient
+
+        # Calculate mix ratio based on distance to goal
+        # At mix_distance or further: 100% ambient, 0% goal
+        # At goal (distance 0): 0% ambient, 100% goal
+        if self.dungeon is None or self.hero is None:
+            return ambient
+
+        distance = self.dungeon.distance_to_goal(self.hero.x, self.hero.y)
+        if distance >= self.mix_distance:
+            goal_ratio = 0.0
+        else:
+            # Inverse square falloff: sound drops off quickly as you move away
+            # At distance 0: ratio = 0.5, at mix_distance: ratio = 0
+            normalized = distance / self.mix_distance
+            goal_ratio = 0.75 * (1.0 - normalized) ** 2
+
+        # Mix the audio
+        mixed = ambient.astype(np.float32) + goal.astype(np.float32) * goal_ratio
+        return np.clip(mixed, -32768, 32767).astype(np.int16)
 
     def is_complete(self) -> bool:
         if self.playing_goal_movie:
@@ -391,13 +473,16 @@ class DungeonWalk(Content):
 
         return False
 
+
 class VideoClip(Content):
     """
     Video clip content that plays both video and audio from a file.
     Uses PyAV for decoding to get synchronized audio.
     """
 
-    def __init__(self, media_path: str, max_length_seconds: int, output_fps: float = 30.0):
+    def __init__(
+        self, media_path: str, max_length_seconds: int, output_fps: float = 30.0
+    ):
         self.media_path = media_path
         self.container: Optional[av.container.InputContainer] = None
         self.video_stream: Optional[av.stream.Stream] = None
@@ -425,31 +510,43 @@ class VideoClip(Content):
         try:
             self.container = av.open(self.media_path)
         except Exception as e:
-            print(f"Error: Could not open video {self.media_path}: {e}", file=sys.stderr)
+            print(
+                f"Error: Could not open video {self.media_path}: {e}", file=sys.stderr
+            )
             return
 
         # Get video stream and read source fps
-        video_streams = [s for s in self.container.streams if s.type == 'video']
+        video_streams = [s for s in self.container.streams if s.type == "video"]
         if video_streams:
             self.video_stream = video_streams[0]
-            self.source_fps = float(self.video_stream.average_rate) if self.video_stream.average_rate else 30.0
-            print(f"Video stream: {self.source_fps:.3f} fps source -> {self.output_fps:.3f} fps output", file=sys.stderr)
+            self.source_fps = (
+                float(self.video_stream.average_rate)
+                if self.video_stream.average_rate
+                else 30.0
+            )
+            print(
+                f"Video stream: {self.source_fps:.3f} fps source -> {self.output_fps:.3f} fps output",
+                file=sys.stderr,
+            )
         else:
             print(f"No video stream in {self.media_path}", file=sys.stderr)
             self.video_stream = None
 
         # Get audio stream
-        audio_streams = [s for s in self.container.streams if s.type == 'audio']
+        audio_streams = [s for s in self.container.streams if s.type == "audio"]
         if audio_streams:
             self.audio_stream = audio_streams[0]
             # Create resampler to convert to our output format (44100Hz stereo s16 planar)
             # Using s16p (planar) gives consistent (channels, samples) shape from to_ndarray()
             self.audio_resampler = av.audio.resampler.AudioResampler(
-                format='s16p',
-                layout='stereo',
+                format="s16p",
+                layout="stereo",
                 rate=self.audio_sample_rate,
             )
-            print(f"Audio stream: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo", file=sys.stderr)
+            print(
+                f"Audio stream: {self.audio_stream.sample_rate}Hz {self.audio_stream.format.name} -> {self.audio_sample_rate}Hz s16p stereo",
+                file=sys.stderr,
+            )
         else:
             print(f"No audio stream in {self.media_path}", file=sys.stderr)
             self.audio_stream = None
@@ -466,7 +563,10 @@ class VideoClip(Content):
                 start_pts = random.randint(0, max_start)
                 start_sec = start_pts / av.time_base
                 self.container.seek(start_pts)
-                print(f"Playing media {self.media_path} from {start_sec:.1f}s {start_pts}pts...", file=sys.stderr)
+                print(
+                    f"Playing media {self.media_path} from {start_sec:.1f}s {start_pts}pts...",
+                    file=sys.stderr,
+                )
             else:
                 print(f"Playing media {self.media_path} from start...", file=sys.stderr)
 
@@ -490,7 +590,7 @@ class VideoClip(Content):
                 if packet.stream == self.video_stream:
                     for frame in packet.decode():
                         # Convert to BGR for OpenCV compatibility
-                        img = frame.to_ndarray(format='bgr24')
+                        img = frame.to_ndarray(format="bgr24")
                         self.current_frame = img
                         return  # Got a video frame, stop
 
@@ -512,12 +612,8 @@ class VideoClip(Content):
             print(f"Error decoding: {e}", file=sys.stderr)
 
     def update(self, dt: float) -> None:
-        pass
-
-    def render(self, width: int, height: int) -> Image:
-        # Advance source time by how much real time one output frame represents
-        output_frame_duration = 1.0 / self.output_fps
-        self.source_time += output_frame_duration
+        # Advance source time by dt
+        self.source_time += dt
 
         # Calculate how much source video time we should have consumed
         source_frame_duration = 1.0 / self.source_fps
@@ -526,17 +622,16 @@ class VideoClip(Content):
         # This handles both dropping frames (source faster than output) and
         # duplicating frames (source slower than output - we just don't decode)
         frames_to_decode = int(self.source_time / source_frame_duration)
-        frames_decoded = 0
 
-        while frames_decoded < frames_to_decode:
+        for _ in range(frames_to_decode):
             self._decode_next()
             if self.current_frame is not None:
                 self.last_decoded_frame = self.current_frame
-            frames_decoded += 1
 
         # Subtract the time we've consumed
         self.source_time -= frames_to_decode * source_frame_duration
 
+    def render(self, width: int, height: int) -> Image:
         # Return the last decoded frame (may be duplicated if source is slower)
         frame_to_show = self.last_decoded_frame
         if frame_to_show is None:
@@ -544,7 +639,9 @@ class VideoClip(Content):
 
         return cv2.resize(frame_to_show, (width, height))
 
-    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         """Return audio samples for this frame."""
         if len(self.audio_buffer) < num_samples:
             # Not enough audio buffered, return what we have padded with silence
@@ -552,7 +649,7 @@ class VideoClip(Content):
                 return None  # No audio, use silence
 
             result = np.zeros((num_samples, channels), dtype=np.int16)
-            result[:len(self.audio_buffer)] = self.audio_buffer[:, :channels]
+            result[: len(self.audio_buffer)] = self.audio_buffer[:, :channels]
             self.audio_buffer = np.zeros((0, 2), dtype=np.int16)
             return result
 
@@ -561,10 +658,12 @@ class VideoClip(Content):
         self.audio_buffer = self.audio_buffer[num_samples:]
         return result
 
+
 class VideoProgram:
     """
     A Stream is a sequence of content objects, that are played one after another.
     """
+
     def __init__(self):
         # List of (Content, duration_seconds)
         self.playlist: List[Tuple[Content, float]] = []
@@ -602,9 +701,13 @@ class VideoProgram:
 
         return self.playlist[self.current_index][0].render(width, height)
 
-    def get_audio(self, num_samples: int, sample_rate: int, channels: int) -> Optional[np.ndarray]:
+    def get_audio(
+        self, num_samples: int, sample_rate: int, channels: int
+    ) -> Optional[np.ndarray]:
         """Get audio from current content."""
         if not self.playlist:
             return None
 
-        return self.playlist[self.current_index][0].get_audio(num_samples, sample_rate, channels)
+        return self.playlist[self.current_index][0].get_audio(
+            num_samples, sample_rate, channels
+        )

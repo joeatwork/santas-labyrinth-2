@@ -83,6 +83,16 @@ class Dungeon:
             return self.map[row, col] == Tile.GOAL
         return False
 
+    def distance_to_goal(self, x: float, y: float) -> float:
+        """Returns Euclidean distance in pixels from position (x, y) to the goal."""
+        goal_pos = self.find_goal_position()
+        if goal_pos is None:
+            return float('inf')
+        goal_x, goal_y = goal_pos
+        dx = goal_x - x
+        dy = goal_y - y
+        return math.sqrt(dx * dx + dy * dy)
+
     # TODO: use a data class for doors rather than tuples
     def find_doors_in_room(self, room_id: int) -> List[Tuple[int, float, float]]:
         """
