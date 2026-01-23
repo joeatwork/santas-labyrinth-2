@@ -9,11 +9,12 @@ import numpy as np
 from typing import Optional, List, Dict
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
+from dungeon.animation import AssetManager
+
 from .conversation import ConversationEngine, ConversationPage
 
 # Type alias matching animation.py
 Image = np.ndarray
-
 
 class ConversationOverlay:
     """
@@ -26,8 +27,9 @@ class ConversationOverlay:
     - Word wrapping for long text
     """
 
-    def __init__(self, engine: ConversationEngine):
+    def __init__(self, engine: ConversationEngine, assets: AssetManager):
         self.engine = engine
+        self.assets = assets
         self.current_page: Optional[ConversationPage] = None
         self.page_elapsed: float = 0.0
         self._portrait_cache: Dict[str, Image] = {}
@@ -135,30 +137,22 @@ class ConversationOverlay:
                 # Shift text to right of portrait
                 text_x_offset = portrait_size + 30
 
-        try:
-            # Use cooler fonts please
-            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 20)
-            small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 14)
-        except (IOError, OSError):
-            font = ImageFont.load_default()
-            small_font = font
-
         # Draw speaker name
         text_x = box_x + text_x_offset
         text_y = box_y + 15
         speaker_name = self.current_page.speaker.upper()
-        draw.text((text_x, text_y), speaker_name, fill=(0, 0, 0), font=small_font)
+        draw.text((text_x, text_y), speaker_name, fill=(0, 0, 0), font=self.assets.fonts['small'])
 
         # Draw text (with word wrapping)
         text_y += 25
         max_text_width = box_width - text_x_offset - 20
 
-        lines = self._wrap_text(self.current_page.text, draw, font, max_text_width)
+        lines = self._wrap_text(self.current_page.text, draw, self.assets.fonts['regular'], max_text_width)
 
         # Draw each line
         line_height = 28
         for i, line in enumerate(lines):
-            draw.text((text_x, text_y + i * line_height), line, fill=(35, 35, 35), font=font)
+            draw.text((text_x, text_y + i * line_height), line, fill=(35, 35, 35), font=self.assets.fonts['regular'])
 
         # Convert back to BGR numpy array
         rgb_result = np.array(pil_image)

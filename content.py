@@ -438,7 +438,8 @@ class DungeonWalk(Content):
                 # Hero entered 'talking' state, start conversation overlay
                 if interact_cmd.npc.conversation_engine is not None:
                     self.conversation_overlay = ConversationOverlay(
-                        interact_cmd.npc.conversation_engine
+                        interact_cmd.npc.conversation_engine,
+                        self.assets
                     )
                     self.conversation_overlay.enter()
                 return

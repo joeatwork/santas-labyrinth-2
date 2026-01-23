@@ -47,12 +47,9 @@ def main():
         sys.exit(1)
 
     # Load Assets
-    try:
-        assets = AssetManager()
-        assets.load_images()
-    except Exception as e:
-        log(f"Error loading assets: {e}")
-        return
+    assets = AssetManager()
+    assets.load_images()
+    assets.load_fonts()
 
     title_card_images = [
         os.path.join("assets", "stills", "title_card_youre_soaking_in_it.png"),

@@ -200,6 +200,7 @@ def main():
     print("Loading assets...", file=sys.stderr)
     assets = AssetManager()
     assets.load_images()
+    assets.load_fonts()
 
     # Create DungeonWalk without goal_movie or ambient_audio
     dungeon_walk = DungeonWalk(

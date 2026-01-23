@@ -2,6 +2,7 @@ import cv2
 import os
 import sys
 import numpy as np
+from PIL import ImageFont
 from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
 from typing import Dict, Any, Optional, Tuple, Protocol, TYPE_CHECKING
 
@@ -171,6 +172,12 @@ class AssetManager:
     def __init__(self) -> None:
         self.images: Dict[str, Image] = {}
         self.sprites: Dict[str, Image] = {}
+        self.fonts: Dict[str, ImageFont.FreeTypeFont] = {}
+
+    def load_fonts(self) -> None:
+        path = os.path.join('assets', 'fonts', 'ChicagoFLF.ttf')
+        self.fonts['regular'] = ImageFont.truetype(path, 20)
+        self.fonts['small'] = ImageFont.truetype(path, 14)
 
     def load_images(self) -> None:
         unique_files = set(cfg['file'] for cfg in SPRITE_OFFSETS.values())
