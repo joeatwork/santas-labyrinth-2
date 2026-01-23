@@ -40,6 +40,9 @@ class NPCThenGoalStrategy(Strategy):
 
     This strategy is specific to the demo and defined here rather than in
     the main strategy module.
+
+    The hero navigates to a tile adjacent to the NPC and triggers the
+    interaction when standing next to the NPC.
     """
 
     def __init__(self, npc: NPC):
@@ -62,12 +65,12 @@ class NPCThenGoalStrategy(Strategy):
         hero_row = int(y / TILE_SIZE)
 
         if not self.has_interacted:
-            # Check if we're at NPC tile
-            if hero_row == self.npc.tile_row and hero_col == self.npc.tile_col:
+            # Check if we're adjacent to the NPC
+            if dungeon.is_adjacent_to_tile(hero_row, hero_col, self.npc.tile_row, self.npc.tile_col):
                 self.has_interacted = True
                 return InteractCommand(npc=self.npc)
 
-            # Navigate toward NPC using BFS
+            # Navigate toward an adjacent tile to the NPC
             return self._navigate_to_npc(hero_row, hero_col, dungeon)
         else:
             # After interaction, seek the goal
@@ -79,8 +82,12 @@ class NPCThenGoalStrategy(Strategy):
         hero_col: int,
         dungeon: 'Dungeon',
     ) -> Optional[MoveCommand]:
-        target_row = self.npc.tile_row
-        target_col = self.npc.tile_col
+        # Find an adjacent walkable tile to the NPC
+        adjacent = dungeon.find_adjacent_walkable_tile(self.npc.tile_row, self.npc.tile_col)
+        if adjacent is None:
+            return None
+
+        target_row, target_col = adjacent
 
         # Recompute path if needed
         if (

@@ -54,7 +54,12 @@ class Dungeon:
         """Check if a tile at (row, col) is walkable."""
         if 0 <= row < self.rows and 0 <= col < self.cols:
             tile = self.map[row, col]
-            return tile in self.WALKABLE_TILES
+            if tile not in self.WALKABLE_TILES:
+                return False
+            # Check if an NPC occupies this tile
+            if self.find_npc_at_tile(row, col) is not None:
+                return False
+            return True
         return False
 
     def get_room_id(self, x: float, y: float) -> int:
@@ -165,6 +170,26 @@ class Dungeon:
     def add_hero(self, hero: 'Hero') -> None:
         """Add a hero to the dungeon."""
         self.hero = hero
+
+    def find_adjacent_walkable_tile(self, row: int, col: int) -> Optional[Tuple[int, int]]:
+        """
+        Find a walkable tile adjacent to the given position.
+        Returns (row, col) of a walkable neighbor, or None if none found.
+        Prefers South, then East, West, North.
+        """
+        # Direction order: South, East, West, North
+        for dr, dc in [(1, 0), (0, 1), (0, -1), (-1, 0)]:
+            adj_row, adj_col = row + dr, col + dc
+            if self.is_tile_walkable(adj_row, adj_col):
+                return (adj_row, adj_col)
+        return None
+
+    def is_adjacent_to_tile(self, row: int, col: int, target_row: int, target_col: int) -> bool:
+        """Check if (row, col) is adjacent to (target_row, target_col)."""
+        dr = abs(row - target_row)
+        dc = abs(col - target_col)
+        # Adjacent means one step in cardinal direction (not diagonal)
+        return (dr == 1 and dc == 0) or (dr == 0 and dc == 1)
 
 
 class Hero:
