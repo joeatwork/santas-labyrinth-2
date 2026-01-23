@@ -93,25 +93,18 @@ class ConversationOverlay:
         pil_image = PILImage.fromarray(rgb_frame)
         draw = ImageDraw.Draw(pil_image)
 
-        # Calculate box dimensions (bottom of screen, full width minus margins)
-        margin = 40
-        box_height = int(height * 0.25)
-        box_x = margin
-        box_y = height - box_height - margin
-        box_width = width - (2 * margin)
+        # Calculate box dimensions
+        box_width = int(width * 0.6)
+        box_height = int(height * 0.8)
+        box_x = (width - box_width) // 2
+        box_y = (height - box_height) // 2
 
-        # Draw semi-transparent dark box
-        overlay = PILImage.new("RGBA", (box_width, box_height), (20, 20, 40, 220))
-        pil_image.paste(overlay, (box_x, box_y), overlay)
-
-        # Reload draw after paste
-        draw = ImageDraw.Draw(pil_image)
-
-        # Draw border
+        # Draw white box with black border
         draw.rectangle(
             [box_x, box_y, box_x + box_width, box_y + box_height],
-            outline=(200, 200, 220),
-            width=2,
+            fill="white",
+            outline="black",
+            width=3,
         )
 
         # Portrait area (left side of box if portrait exists)
@@ -142,8 +135,8 @@ class ConversationOverlay:
                 # Shift text to right of portrait
                 text_x_offset = portrait_size + 30
 
-        # Load font
         try:
+            # Use cooler fonts please
             font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 20)
             small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 14)
         except (IOError, OSError):
@@ -154,7 +147,7 @@ class ConversationOverlay:
         text_x = box_x + text_x_offset
         text_y = box_y + 15
         speaker_name = self.current_page.speaker.upper()
-        draw.text((text_x, text_y), speaker_name, fill=(180, 180, 220), font=small_font)
+        draw.text((text_x, text_y), speaker_name, fill=(0, 0, 0), font=small_font)
 
         # Draw text (with word wrapping)
         text_y += 25
@@ -165,7 +158,7 @@ class ConversationOverlay:
         # Draw each line
         line_height = 28
         for i, line in enumerate(lines):
-            draw.text((text_x, text_y + i * line_height), line, fill=(255, 255, 255), font=font)
+            draw.text((text_x, text_y + i * line_height), line, fill=(35, 35, 35), font=font)
 
         # Convert back to BGR numpy array
         rgb_result = np.array(pil_image)

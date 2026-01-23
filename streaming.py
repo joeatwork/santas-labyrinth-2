@@ -42,12 +42,7 @@ class FFmpegStreamer:
         # Build ffmpeg command to read NUT from stdin and output FLV
         cmd = [
             "ffmpeg",
-            
-            # We write to the ffmpeg process as fast as we can,
-            # and the -re flag ensures we don't overwhelm client buffers
-            # by getting too far ahead.
-            "-re",
-            
+
             # log progress once per minute
             "-stats_period", "60",
 
@@ -68,6 +63,11 @@ class FFmpegStreamer:
         is_rtmp = self.output_target.startswith("rtmp://")
 
         if is_rtmp:
+            # We write to the ffmpeg process as fast as we can,
+            # and the -re flag ensures we don't overwhelm client buffers
+            # by getting too far ahead.
+            cmd.append("-re")
+
             # RTMP-specific buffering and rate control
             cmd.extend([
                 # Rate control for smoother streaming
@@ -208,6 +208,8 @@ class FFmpegStreamer:
             return False
 
     def close(self) -> None:
+        # This can take a long time, since ffmpeg runs in -re
+        # mode and may have buffered a lot of video.
         if self.container:
             try:
                 # Flush video encoder
@@ -230,7 +232,7 @@ class FFmpegStreamer:
 
         if self.ffmpeg_process:
             try:
-                self.ffmpeg_process.wait(timeout=5)
+                self.ffmpeg_process.wait(timeout=60)
             except Exception as e:
                 print(f"Error closing ffmpeg: {e}", file=sys.stderr)
                 self.ffmpeg_process.kill()

@@ -1,9 +1,17 @@
 """Unit tests for NPC entity."""
 
 import pytest
+import math
 
-from dungeon.npc import NPC, distance_to_npc, TILE_SIZE
+from dungeon.npc import NPC, TILE_SIZE
 from dungeon.conversation import ConversationPage, ScriptedConversation
+
+
+def distance_to_npc(hero_x: float, hero_y: float, npc: NPC) -> float:
+    """Calculate Euclidean distance from a position to an NPC."""
+    dx = npc.x - hero_x
+    dy = npc.y - hero_y
+    return math.sqrt(dx * dx + dy * dy)
 
 
 def make_test_conversation():

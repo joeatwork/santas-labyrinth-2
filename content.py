@@ -340,9 +340,9 @@ class DungeonWalk(Content):
         self.crash_overlay: Optional[CrashOverlay] = None
 
         self.goal_movie = goal_movie
-        self.playing_goal_movie: bool = False  # True when showing goal_movie video
+        self.hit_goal: bool = False  # True when showing goal_movie video
         self.goal_movie_time: float = 0.0  # Time spent playing goal movie
-        self.goal_movie_duration: float = 20.0  # Max seconds to play goal movie
+        self.goal_movie_duration: float = 20.0 if self.goal_movie else 0.0 # Max seconds to play goal movie
 
         # Audio mixing: goal_movie audio fades in as hero approaches goal
         self.mix_distance = (
@@ -372,7 +372,7 @@ class DungeonWalk(Content):
         self.idle_time = 0.0
         self.crash_overlay = None
         self.conversation_overlay = None
-        self.playing_goal_movie = False
+        self.hit_goal = False
         self.goal_movie_time = 0.0
 
         if self.ambient_audio is not None:
@@ -383,6 +383,8 @@ class DungeonWalk(Content):
             self.goal_movie.enter()
 
     def update(self, dt: float) -> None:
+        assert self.dungeon is not None
+
         if self.ambient_audio is not None and self.ambient_audio.is_complete():
             self.ambient_audio.enter()
 
@@ -405,7 +407,7 @@ class DungeonWalk(Content):
             self.crash_overlay.update(dt)
             return
 
-        if self.playing_goal_movie:
+        if self.hit_goal:
             if self.goal_movie is not None:
                 self.goal_movie.update(dt)
             self.goal_movie_time += dt
@@ -426,7 +428,7 @@ class DungeonWalk(Content):
                 file=sys.stderr,
             )
             # Don't re-enter goal_movie - keep audio playing uninterrupted
-            self.playing_goal_movie = True
+            self.hit_goal = True
             return
 
         # Update hero - may return InteractCommand if strategy wants to talk
@@ -455,7 +457,7 @@ class DungeonWalk(Content):
         self.crash_overlay = CrashOverlay(["robot crash detected ... rebooting ..."])
 
     def render(self, width: int, height: int) -> Image:
-        if self.playing_goal_movie and self.goal_movie is not None:
+        if self.hit_goal and self.goal_movie is not None:
             return self.goal_movie.render(width, height)
 
         # Render base dungeon frame (without foreground - we'll add it after NPCs)
@@ -495,7 +497,7 @@ class DungeonWalk(Content):
     def get_audio(
         self, num_samples: int, sample_rate: int, channels: int
     ) -> Optional[np.ndarray]:
-        if self.playing_goal_movie and self.goal_movie is not None:
+        if self.hit_goal and self.goal_movie is not None:
             return self.goal_movie.get_audio(num_samples, sample_rate, channels)
 
         # Get both audio sources
@@ -526,7 +528,7 @@ class DungeonWalk(Content):
         return np.clip(mixed, -32768, 32767).astype(np.int16)
 
     def is_complete(self) -> bool:
-        if self.playing_goal_movie:
+        if self.hit_goal:
             return self.goal_movie_time >= self.goal_movie_duration
 
         # Complete if crash overlay finished
