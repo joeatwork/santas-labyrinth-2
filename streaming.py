@@ -40,8 +40,7 @@ class FFmpegStreamer:
 
     def start(self) -> None:
         # Build ffmpeg command to read NUT from stdin and output FLV
-        cmd = [
-            "ffmpeg",
+        cmd_options = [
 
             # log progress once per minute
             "-stats_period", "60",
@@ -66,10 +65,10 @@ class FFmpegStreamer:
             # We write to the ffmpeg process as fast as we can,
             # and the -re flag ensures we don't overwhelm client buffers
             # by getting too far ahead.
-            cmd.append("-re")
+            cmd_options.insert(0, "-re")
 
             # RTMP-specific buffering and rate control
-            cmd.extend([
+            cmd_options.extend([
                 # Rate control for smoother streaming
                 "-maxrate", "3000k",
                 "-bufsize", "6000k",  # 2 seconds of buffer at 3Mbps
@@ -80,24 +79,24 @@ class FFmpegStreamer:
                 # Output format
                 "-f", "flv",
             ])
-            cmd.append(self.output_target)
+            cmd_options.append(self.output_target)
             print(f"Starting FFmpeg stream to RTMP: {self.output_target[:50]}...", file=sys.stderr)
         elif self.output_target == "-":
-            cmd.extend(["-f", "flv"])
-            cmd.append("pipe:1")
+            cmd_options.extend(["-f", "flv"])
+            cmd_options.append("pipe:1")
             print("Starting FFmpeg stream to: stdout", file=sys.stderr)
         else:
-            cmd.extend(["-f", "flv"])
-            cmd.append(self.output_target)
+            cmd_options.extend(["-f", "flv"])
+            cmd_options.append(self.output_target)
             print(f"Starting FFmpeg stream to file: {self.output_target}", file=sys.stderr)
 
-        print(f"FFmpeg command: {' '.join(cmd[:20])}...", file=sys.stderr)
+        print(f"FFmpeg command: {' '.join(cmd_options[:20])}...", file=sys.stderr)
 
         # Start ffmpeg
         # Only redirect stdout if we're piping to stdout
         stdout_dest = sys.stdout.buffer if self.output_target == "-" else None
         self.ffmpeg_process = subprocess.Popen(
-            cmd,
+            ["ffmpeg"] + cmd_options,
             stdin=subprocess.PIPE,
             stdout=stdout_dest,
             stderr=None,  # Let ffmpeg errors show for debugging
@@ -211,6 +210,8 @@ class FFmpegStreamer:
         # This can take a long time, since ffmpeg runs in -re
         # mode and may have buffered a lot of video.
         if self.container:
+            assert self.ffmpeg_process
+
             try:
                 # Flush video encoder
                 if self.video_stream:
@@ -223,6 +224,7 @@ class FFmpegStreamer:
                         self.container.mux(packet)
 
                 self.container.close()
+                self.ffmpeg_process.stdin.close()
             except Exception as e:
                 print(f"Error closing container: {e}", file=sys.stderr)
             finally:
