@@ -27,6 +27,9 @@ class Dungeon:
         # NPC registry
         self.npcs: List[NPC] = []
 
+        # Hero (set via add_hero() for custom strategies)
+        self.hero: Optional['Hero'] = None
+
     # Tiles that can be walked on
     WALKABLE_TILES = (
         Tile.FLOOR,
@@ -158,6 +161,10 @@ class Dungeon:
     def get_npcs_in_room(self, room_id: int) -> List[NPC]:
         """Get all NPCs in a specific room."""
         return [npc for npc in self.npcs if npc.room_id == room_id]
+
+    def add_hero(self, hero: 'Hero') -> None:
+        """Add a hero to the dungeon."""
+        self.hero = hero
 
 
 class Hero:
