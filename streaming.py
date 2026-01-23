@@ -224,7 +224,7 @@ class FFmpegStreamer:
                         self.container.mux(packet)
 
                 self.container.close()
-                self.ffmpeg_process.stdin.close()
+               
             except Exception as e:
                 print(f"Error closing container: {e}", file=sys.stderr)
             finally:
@@ -234,7 +234,8 @@ class FFmpegStreamer:
 
         if self.ffmpeg_process:
             try:
-                self.ffmpeg_process.wait(timeout=60)
+                self.ffmpeg_process.stdin.close()
+                self.ffmpeg_process.wait(timeout=10)
             except Exception as e:
                 print(f"Error closing ffmpeg: {e}", file=sys.stderr)
                 self.ffmpeg_process.kill()
