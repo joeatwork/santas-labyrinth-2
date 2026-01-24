@@ -128,7 +128,8 @@ def main():
 
             frame_count += 1
     finally:
-        log("Stopping stream...")
+        moment = datetime.datetime.now()
+        log(f"Stopping stream at {moment}...")
         streamer.close()
 
 

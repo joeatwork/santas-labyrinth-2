@@ -6,6 +6,7 @@ from typing import Tuple, List, Optional, Callable, Dict
 
 TILE_SIZE: int = 64
 
+
 class Dungeon:
     def __init__(self, num_rooms: int) -> None:
         self.map: DungeonMap
@@ -15,7 +16,9 @@ class Dungeon:
         self.room_positions: Dict[int, Tuple[int, int]]
         self.room_templates: Dict[int, RoomTemplate]
 
-        self.map, self.start_pos, self.room_positions, self.room_templates = generate_dungeon(num_rooms)
+        self.map, self.start_pos, self.room_positions, self.room_templates = (
+            generate_dungeon(num_rooms)
+        )
 
         self.rows: int
         self.cols: int
@@ -28,7 +31,7 @@ class Dungeon:
         self.npcs: List[NPC] = []
 
         # Hero (set via add_hero() for custom strategies)
-        self.hero: Optional['Hero'] = None
+        self.hero: Optional["Hero"] = None
 
     # Tiles that can be walked on
     WALKABLE_TILES = (
@@ -70,8 +73,10 @@ class Dungeon:
         # Search through rooms to find which one contains this tile
         for room_id, (pos_x, pos_y) in self.room_positions.items():
             template = self.room_templates[room_id]
-            if (pos_x <= tile_col < pos_x + template.width and
-                pos_y <= tile_row < pos_y + template.height):
+            if (
+                pos_x <= tile_col < pos_x + template.width
+                and pos_y <= tile_row < pos_y + template.height
+            ):
                 return room_id
 
         return 0
@@ -82,7 +87,10 @@ class Dungeon:
         for row in range(self.rows):
             for col in range(self.cols):
                 if self.map[row, col] == Tile.GOAL:
-                    return (col * TILE_SIZE + TILE_SIZE / 2, row * TILE_SIZE + TILE_SIZE / 2)
+                    return (
+                        col * TILE_SIZE + TILE_SIZE // 2,
+                        row * TILE_SIZE + TILE_SIZE // 2,
+                    )
         return None
 
     def is_on_goal(self, x: float, y: float) -> bool:
@@ -97,40 +105,31 @@ class Dungeon:
         """Returns Euclidean distance in pixels from position (x, y) to the goal."""
         goal_pos = self.find_goal_position()
         if goal_pos is None:
-            return float('inf')
+            return float("inf")
         goal_x, goal_y = goal_pos
         dx = goal_x - x
         dy = goal_y - y
         return math.sqrt(dx * dx + dy * dy)
 
-    # TODO: use a data class for doors rather than tuples
-    def find_doors_in_room(self, room_id: int) -> List[Tuple[int, float, float]]:
+    def find_doors_in_room(self, room_id: int) -> List[Tuple[int, int]]:
         """
-        Returns list of (direction, pixel_x, pixel_y) for doors in the given room.
-        Direction: 0=East, 1=South, 2=West, 3=North
-
-        Scans the room tiles for door tile types and returns their center positions.
+        Scans the room tiles for door tile types and returns a door tile
+        for each door in the room. Returns the door tile as (row, col).
+        Which door tile is implementation dependent but it will return 
+        only one tile for each door.
         """
-        doors: List[Tuple[int, float, float]] = []
+        doors: List[Tuple[int, int]] = []
         found_doors: set[int] = set()  # Track which directions we've found
 
         # Determine room bounds
         if room_id not in self.room_positions:
-            return doors
-        pos_x, pos_y = self.room_positions[room_id]
+            raise RuntimeError(f"no such room {room_id}")
+
+        # room_positions to tile offsets
+        base_col, base_row = self.room_positions[room_id]
         template = self.room_templates[room_id]
-        base_col = pos_x
-        base_row = pos_y
         room_width = template.width
         room_height = template.height
-
-        # Map door tile types to directions (use first tile of each door pair)
-        door_tile_to_direction = {
-            Tile.NORTH_DOOR_WEST: 3,
-            Tile.SOUTH_DOOR_WEST: 1,
-            Tile.EAST_DOOR_NORTH: 0,
-            Tile.WEST_DOOR_NORTH: 2,
-        }
 
         # Scan all tiles in the room for door tiles
         for local_row in range(room_height):
@@ -139,15 +138,13 @@ class Dungeon:
                 map_col = base_col + local_col
                 if 0 <= map_row < self.rows and 0 <= map_col < self.cols:
                     tile = self.map[map_row, map_col]
-                    if tile in door_tile_to_direction:
-                        direction = door_tile_to_direction[tile]
-                        # Only add each door direction once (doors span multiple tiles)
-                        if direction not in found_doors:
-                            found_doors.add(direction)
-                            # Calculate door center position
-                            door_x = (map_col + 0.5) * TILE_SIZE
-                            door_y = (map_row + 0.5) * TILE_SIZE
-                            doors.append((direction, door_x, door_y))
+                    if tile in (
+                        Tile.NORTH_DOOR_WEST,
+                        Tile.SOUTH_DOOR_WEST,
+                        Tile.EAST_DOOR_NORTH,
+                        Tile.WEST_DOOR_NORTH,
+                    ):
+                        doors.append((map_row, map_col))
 
         return doors
 
@@ -167,11 +164,13 @@ class Dungeon:
         """Get all NPCs in a specific room."""
         return [npc for npc in self.npcs if npc.room_id == room_id]
 
-    def add_hero(self, hero: 'Hero') -> None:
+    def add_hero(self, hero: "Hero") -> None:
         """Add a hero to the dungeon."""
         self.hero = hero
 
-    def find_adjacent_walkable_tile(self, row: int, col: int) -> Optional[Tuple[int, int]]:
+    def find_adjacent_walkable_tile(
+        self, row: int, col: int
+    ) -> Optional[Tuple[int, int]]:
         """
         Find a walkable tile adjacent to the given position.
         Returns (row, col) of a walkable neighbor, or None if none found.
@@ -184,7 +183,9 @@ class Dungeon:
                 return (adj_row, adj_col)
         return None
 
-    def is_adjacent_to_tile(self, row: int, col: int, target_row: int, target_col: int) -> bool:
+    def is_adjacent_to_tile(
+        self, row: int, col: int, target_row: int, target_col: int
+    ) -> bool:
         """Check if (row, col) is adjacent to (target_row, target_col)."""
         dr = abs(row - target_row)
         dc = abs(col - target_col)
@@ -222,7 +223,7 @@ class Hero:
         self.target_x: float = x
         self.target_y: float = y
 
-        self.state: str = 'idle'  # idle, walking, talking
+        self.state: str = "idle"  # idle, walking, talking
 
         # Animation State
         self.walk_frame: int = 0  # 0 or 1
@@ -234,7 +235,7 @@ class Hero:
         else:
             self.strategy = GoalSeekingStrategy(random_choice=random_choice)
 
-    def update(self, dt: float, dungeon: 'Dungeon') -> Optional[InteractCommand]:
+    def update(self, dt: float, dungeon: "Dungeon") -> Optional[InteractCommand]:
         """
         Update hero state.
 
@@ -242,22 +243,22 @@ class Hero:
             InteractCommand if strategy wants to interact with an NPC,
             None otherwise.
         """
-        if self.state == 'idle':
+        if self.state == "idle":
             interact_cmd = self._decide_next_move(dungeon)
             self.walk_frame = 0  # Reset to standing frame when idle
             return interact_cmd
 
-        elif self.state == 'walking':
+        elif self.state == "walking":
             self._move(dt)
             return None
 
-        elif self.state == 'talking':
+        elif self.state == "talking":
             # Don't move or decide - DungeonWalk handles conversation
             return None
 
         return None
 
-    def _decide_next_move(self, dungeon: 'Dungeon') -> Optional[InteractCommand]:
+    def _decide_next_move(self, dungeon: "Dungeon") -> Optional[InteractCommand]:
         """Ask the strategy for the next move and apply it."""
         command = self.strategy.decide_next_move(self.x, self.y, dungeon)
 
@@ -265,10 +266,10 @@ class Hero:
             self.target_x = command.target_x
             self.target_y = command.target_y
             self.direction = command.direction
-            self.state = 'walking'
+            self.state = "walking"
             return None
         elif isinstance(command, InteractCommand):
-            self.state = 'talking'
+            self.state = "talking"
             return command
         else:
             # None - stay idle
@@ -276,8 +277,8 @@ class Hero:
 
     def end_conversation(self) -> None:
         """Called by DungeonWalk when conversation ends."""
-        if self.state == 'talking':
-            self.state = 'idle'
+        if self.state == "talking":
+            self.state = "idle"
 
     def _move(self, dt: float) -> None:
         move_dist = self.speed * dt
@@ -296,7 +297,7 @@ class Hero:
         if dist_sq <= move_dist * move_dist:
             self.x = self.target_x
             self.y = self.target_y
-            self.state = 'idle'
+            self.state = "idle"
         else:
             angle = math.atan2(diff_y, diff_x)
             self.x += math.cos(angle) * move_dist

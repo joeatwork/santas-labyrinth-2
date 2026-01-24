@@ -6,7 +6,9 @@ They are decoupled from the mob's movement and animation.
 """
 
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from dataclasses import dataclass
+import sys
 from typing import Tuple, List, Optional, Callable, Set, Union, TYPE_CHECKING
 import numpy as np
 
@@ -23,6 +25,7 @@ TILE_SIZE: int = 64
 @dataclass
 class MoveCommand:
     """A command from a strategy telling a mob where to move next."""
+
     target_x: float
     target_y: float
     direction: int  # 0=East, 1=South, 2=West, 3=North
@@ -31,7 +34,8 @@ class MoveCommand:
 @dataclass
 class InteractCommand:
     """A command from a strategy to interact with an NPC."""
-    npc: 'NPC'
+
+    npc: "NPC"
 
 
 # Union type for all strategy commands
@@ -52,7 +56,7 @@ class Strategy(ABC):
         self,
         x: float,
         y: float,
-        dungeon: 'Dungeon',
+        dungeon: "Dungeon",
     ) -> StrategyCommand:
         """
         Decide the next move for a mob at position (x, y).
@@ -83,14 +87,12 @@ class GoalSeekingStrategy(Strategy):
 
     def __init__(
         self,
-        random_choice: Optional[Callable[[List], any]] = None,
+        random_choice: Optional[
+            Callable[[List[Tuple[int, int]]], Tuple[int, int]]
+        ] = None,
     ) -> None:
-        # Navigation state
-        self.last_door_direction: Optional[int] = None
-        self.last_room_id: Optional[int] = None
-
-        # Dead end tracking: set of (room_id, direction) tuples
-        self.dead_end_doors: Set[Tuple[int, int]] = set()
+        # Keep track of the doors we've traversed, most recent last
+        self.lru_doors: OrderedDict[Tuple[int, int], None] = OrderedDict()
 
         # Target tile (row, col)
         self.next_goal_row: Optional[int] = None
@@ -106,69 +108,50 @@ class GoalSeekingStrategy(Strategy):
             lambda lst: lst[np.random.randint(0, len(lst))]
         )
 
-    def is_dead_end(self, room_id: int, direction: int) -> bool:
-        """Check if a door is marked as a dead end."""
-        return (room_id, direction) in self.dead_end_doors
-
-    def mark_dead_end(self, room_id: int, direction: int) -> None:
-        """Mark a door as a dead end."""
-        self.dead_end_doors.add((room_id, direction))
-
-    def _check_and_mark_dead_end(
-        self,
-        x: float,
-        y: float,
-        dungeon: 'Dungeon',
-        previous_room_id: int,
-        entry_direction: int,
-    ) -> None:
+    def _find_door_northwest_corner(
+        self, row: int, col: int, dungeon: "Dungeon"
+    ) -> Optional[Tuple[int, int]]:
         """
-        Check if the door we just came through should be marked as a dead end.
-
-        A door is a dead end if:
-        - The room it leads to has no other doors, OR
-        - All other doors in the room (except the entry door) are already marked as dead ends
+        returns the (row, col) of the northwest corner of a door if the
+        given row, column is any part of a door. Returns None if the
+        given row, column isn't part of a door
         """
-        # Get the opposite direction (the door we entered through in the current room)
-        opposite_direction = (entry_direction + 2) % 4
-
-        current_room_id = dungeon.get_room_id(x, y)
-        doors_in_current_room = dungeon.find_doors_in_room(current_room_id)
-
-        # Get all doors except the one we entered through
-        other_doors = [d for d in doors_in_current_room if d[0] != opposite_direction]
-
-        # Check if this is a dead end
-        is_dead_end = False
-        if not other_doors:
-            is_dead_end = True
-        else:
-            all_dead_ends = all(
-                self.is_dead_end(current_room_id, d[0]) for d in other_doors
-            )
-            if all_dead_ends:
-                is_dead_end = True
-
-        if is_dead_end:
-            self.mark_dead_end(previous_room_id, entry_direction)
-
-    def _update_door_tracking(self, x: float, y: float, dungeon: 'Dungeon') -> None:
-        """Update which door we're currently on."""
-        col = int(x / TILE_SIZE)
-        row = int(y / TILE_SIZE)
         current_tile = dungeon.map[row, col]
+        if current_tile == Tile.NORTH_DOOR_WEST:
+            return (row, col)
+        elif current_tile == Tile.NORTH_DOOR_EAST:
+            return (row, col - 1)
+        elif current_tile == Tile.SOUTH_DOOR_WEST:
+            return (row - 1, col)
+        elif current_tile == Tile.SOUTH_DOOR_EAST:
+            return (row - 1, col - 1)
+        elif current_tile == Tile.WEST_DOOR_NORTH:
+            return (row, col)
+        elif current_tile == Tile.WEST_DOOR_SOUTH:
+            return (row - 1, col)
+        elif current_tile == Tile.EAST_DOOR_NORTH:
+            return (row, col - 1)
+        elif current_tile == Tile.EAST_DOOR_SOUTH:
+            return (row - 1, col - 1)
 
-        if current_tile in (Tile.NORTH_DOOR_WEST, Tile.NORTH_DOOR_EAST):
-            self.last_door_direction = 3
-        elif current_tile in (Tile.SOUTH_DOOR_WEST, Tile.SOUTH_DOOR_EAST):
-            self.last_door_direction = 1
-        elif current_tile in (Tile.EAST_DOOR_NORTH, Tile.EAST_DOOR_SOUTH):
-            self.last_door_direction = 0
-        elif current_tile in (Tile.WEST_DOOR_NORTH, Tile.WEST_DOOR_SOUTH):
-            self.last_door_direction = 2
+        return None
 
-    def _select_target(self, x: float, y: float, dungeon: 'Dungeon') -> None:
+    def _update_door_tracking(self, row, col, dungeon: "Dungeon") -> None:
+        """
+        Record the door we're currently on, and the door we most recently passed through
+        """
+        current_door = self._find_door_northwest_corner(row, col, dungeon)
+        if current_door is not None:
+            if current_door in self.lru_doors:
+                self.lru_doors.move_to_end(current_door)
+            else:
+                self.lru_doors[current_door] = None
+
+    def _select_target(self, x: float, y: float, dungeon: "Dungeon") -> None:
         """Select a new target tile if we don't have one."""
+        self.next_goal_row = None
+        self.next_goal_col = None
+
         current_room = dungeon.get_room_id(x, y)
 
         # First, check if goal is in the same room
@@ -181,57 +164,64 @@ class GoalSeekingStrategy(Strategy):
                 return
 
         # Otherwise, pick a door
+        chosen_door = None
+
         doors = dungeon.find_doors_in_room(current_room)
-        other_doors = [d for d in doors if d[0] != self.last_door_direction]
-        non_dead_end_doors = [
-            d for d in other_doors if not self.is_dead_end(current_room, d[0])
+        keys_and_doors = [
+            (self._find_door_northwest_corner(row, col, dungeon), (row, col))
+            for (row, col) in doors
+        ]
+        new_doors: List[Tuple[int, int]] = [
+            door for (key, door) in keys_and_doors if key not in self.lru_doors
         ]
 
-        if non_dead_end_doors:
-            chosen_door = self._random_choice(non_dead_end_doors)
+        if new_doors:
+            chosen_door = self._random_choice(new_doors)
         else:
-            chosen_door = doors[0]
+            doors_by_id = dict(keys_and_doors)
+            for id in self.lru_doors.keys():
+                if id in doors_by_id:
+                    chosen_door = doors_by_id[id]
+                    break
 
-        door_dir, door_x, door_y = chosen_door
+        if not chosen_door:
+            print(
+                "no goal or doors in room {x}, {y}: {current_room}! hero is dead in the water!",
+                file=sys.stderr,
+            )
+            return  # we have nothing to do!
+
+        door_row, door_col = chosen_door
+        door_tile = dungeon.map[chosen_door]  # TODO: is this transposed?
 
         # Set target to a tile just beyond the door
-        if door_dir == 0:  # East
-            self.next_goal_row = int(door_y / TILE_SIZE)
-            self.next_goal_col = int(door_x / TILE_SIZE) + 2
-        elif door_dir == 1:  # South
-            self.next_goal_row = int(door_y / TILE_SIZE) + 2
-            self.next_goal_col = int(door_x / TILE_SIZE)
-        elif door_dir == 2:  # West
-            self.next_goal_row = int(door_y / TILE_SIZE)
-            self.next_goal_col = int(door_x / TILE_SIZE) - 2
-        elif door_dir == 3:  # North
-            self.next_goal_row = int(door_y / TILE_SIZE) - 2
-            self.next_goal_col = int(door_x / TILE_SIZE)
+        if door_tile in (Tile.NORTH_DOOR_EAST, Tile.NORTH_DOOR_WEST):
+            self.next_goal_row = door_row - 2
+            self.next_goal_col = door_col
+        elif door_tile in (Tile.SOUTH_DOOR_EAST, Tile.SOUTH_DOOR_WEST):
+            self.next_goal_row = door_row + 2
+            self.next_goal_col = door_col
+        elif door_tile in (Tile.EAST_DOOR_NORTH, Tile.EAST_DOOR_SOUTH):
+            self.next_goal_row = door_row
+            self.next_goal_col = door_col + 2
+        elif door_tile in (Tile.WEST_DOOR_NORTH, Tile.WEST_DOOR_SOUTH):
+            self.next_goal_row = door_row
+            self.next_goal_col = door_col - 2
         else:
-            raise ValueError(f"Invalid door direction {door_dir}")
+            raise RuntimeError(f"bug identifying door, {chosen_door} is {door_tile}")
 
     def decide_next_move(
         self,
         x: float,
         y: float,
-        dungeon: 'Dungeon',
+        dungeon: "Dungeon",
     ) -> StrategyCommand:
         """Decide the next move for a mob at position (x, y)."""
         hero_col = int(x / TILE_SIZE)
         hero_row = int(y / TILE_SIZE)
 
         # Track door crossings
-        self._update_door_tracking(x, y, dungeon)
-
-        current_room = dungeon.get_room_id(x, y)
-
-        # Detect room changes and check for dead ends
-        if self.last_room_id is not None and current_room != self.last_room_id:
-            if self.last_door_direction is not None:
-                self._check_and_mark_dead_end(
-                    x, y, dungeon, self.last_room_id, self.last_door_direction
-                )
-        self.last_room_id = current_room
+        self._update_door_tracking(hero_row, hero_col, dungeon)
 
         # Check if we reached our target
         if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
@@ -290,6 +280,8 @@ class GoalSeekingStrategy(Strategy):
 
             self.path_index += 1
 
-            return MoveCommand(target_x=target_x, target_y=target_y, direction=direction)
+            return MoveCommand(
+                target_x=target_x, target_y=target_y, direction=direction
+            )
 
         return None

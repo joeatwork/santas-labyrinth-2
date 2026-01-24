@@ -30,6 +30,8 @@ class MockStrategy(Strategy):
         return None
 
 
+# TODO: We want to be able to control the layout of our own dungeons
+# anyway amd this mock is too complex.
 class MockDungeon:
     """A mock dungeon for testing with controllable layout."""
 
@@ -144,11 +146,15 @@ class MockDungeon:
     def find_goal_position(self) -> Optional[Tuple[float, float]]:
         return self._goal_position
 
-    def find_doors_in_room(self, room_id: int) -> List[Tuple[int, float, float]]:
-        """Scan room tiles for door tiles and return their positions."""
-        doors: List[Tuple[int, float, float]] = []
+    def find_doors_in_room(self, room_id: int) -> List[Tuple[int, int]]:
+        """
+        Scan room tiles for door tiles and return their positions.
+        Returns the northwest-most tile of each door as (row, col) tuples.
+        """
+        doors: List[Tuple[int, int]] = []
         found_doors: set[int] = set()
 
+        # Map door tiles to their direction, only including northwest-most tiles
         door_tile_to_direction = {
             Tile.NORTH_DOOR_WEST: 3,
             Tile.SOUTH_DOOR_WEST: 1,
@@ -166,9 +172,7 @@ class MockDungeon:
                     direction = door_tile_to_direction[tile]
                     if direction not in found_doors:
                         found_doors.add(direction)
-                        door_x = (tile_col + 0.5) * TILE_SIZE
-                        door_y = (tile_row + 0.5) * TILE_SIZE
-                        doors.append((direction, door_x, door_y))
+                        doors.append((tile_row, tile_col))
 
         return doors
 
@@ -308,114 +312,77 @@ class TestStrategyPathfinding:
             "Path should not include the pillar tile"
 
 
-class TestStrategyDeadEndTracking:
-    """Test that GoalSeekingStrategy marks and avoids dead end doors."""
+class TestStrategyLRUDoorTracking:
+    """Test that GoalSeekingStrategy tracks and prefers least recently used doors."""
 
-    def test_strategy_marks_door_as_dead_end_when_room_has_no_other_doors(self):
-        """Strategy marks a door as dead end after entering a room with only one door."""
-        dungeon = MockDungeon(2, 1)
-
-        # Room 0 (left) has east door, Room 1 (right) has only west door (dead end)
-        dungeon.add_door(0, 0, 0)  # East door in room 0
-        dungeon.add_door(0, 1, 2)  # West door in room 1
-
-        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
-
-        # Strategy should not have any dead ends marked yet
-        assert len(strategy.dead_end_doors) == 0
-
-        # Start in room 0
-        x, y = room_center(0, 0)
-        strategy.decide_next_move(x, y, dungeon)
-
-        # Move to room 1 (past the door)
-        x = ROOM_WIDTH * TILE_SIZE + TILE_SIZE * 5  # Center of room 1
-        y = TILE_SIZE * 5
-        strategy.last_door_direction = 0  # Came through east door
-        strategy.last_room_id = 0  # Was in room 0
-
-        # Now call decide_next_move - it should detect room change and mark dead end
-        strategy.decide_next_move(x, y, dungeon)
-
-        # The east door of room 0 should now be marked as a dead end
-        assert strategy.is_dead_end(0, 0), "East door of room 0 should be marked as dead end"
-
-    def test_strategy_prefers_non_dead_end_doors(self):
-        """Strategy chooses non-dead-end doors over dead-end doors."""
+    def test_strategy_prefers_new_doors_over_visited(self):
+        """Strategy chooses doors it hasn't visited over previously visited doors."""
         dungeon = MockDungeon(2, 2)
 
         # Room 0 has east and south doors
-        dungeon.add_door(0, 0, 0)  # East door
-        dungeon.add_door(0, 0, 1)  # South door
+        dungeon.add_door(0, 0, 0)  # East door: EAST_DOOR_NORTH at (4, 11), NW corner at (4, 10)
+        dungeon.add_door(0, 0, 1)  # South door: SOUTH_DOOR_WEST at (9, 5), NW corner at (8, 5)
 
         x, y = room_center(0, 0)
-        # Use random_choice that returns last item (to verify filtering works)
-        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[-1])
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
 
-        # Mark east door as dead end
-        strategy.mark_dead_end(0, 0)
+        # Manually mark the east door as visited
+        # The northwest corner for an east door at (4, 11) is (4, 10)
+        east_door_nw = (4, 10)
+        strategy.lru_doors[east_door_nw] = None
 
-        # Strategy should choose south door (only non-dead-end option)
+        # Strategy should choose south door (new, unvisited)
         strategy.decide_next_move(x, y, dungeon)
 
         # Target should be beyond south door (row + 2)
         expected_target_row = 9 + 2  # South door is at row 9, target is 2 tiles beyond
         assert strategy.next_goal_row == expected_target_row, \
-            f"Strategy should target south door, got row {strategy.next_goal_row}"
+            f"Strategy should target south door (unvisited), got row {strategy.next_goal_row}"
 
-    def test_strategy_uses_dead_end_door_when_no_other_options(self):
-        """Strategy uses dead-end door when it's the only non-entry option."""
+    def test_strategy_uses_least_recently_used_door_when_all_visited(self):
+        """Strategy uses least recently used door when all doors have been visited."""
         dungeon = MockDungeon(2, 2)
 
         # Room 0 has east and south doors
-        dungeon.add_door(0, 0, 0)  # East door
-        dungeon.add_door(0, 0, 1)  # South door
+        dungeon.add_door(0, 0, 0)  # East door: NW corner at (4, 10)
+        dungeon.add_door(0, 0, 1)  # South door: NW corner at (8, 5)
 
         x, y = room_center(0, 0)
         strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
 
-        # Mark both doors as dead ends
-        strategy.mark_dead_end(0, 0)  # East
-        strategy.mark_dead_end(0, 1)  # South
+        # Manually mark both doors as visited, with east door being least recent
+        east_door_nw = (4, 10)
+        south_door_nw = (8, 5)
+        strategy.lru_doors[east_door_nw] = None  # Visited first (least recent)
+        strategy.lru_doors[south_door_nw] = None  # Visited second (most recent)
 
-        # Strategy should still choose one of them
+        # Strategy should choose east door (least recently used)
         strategy.decide_next_move(x, y, dungeon)
 
-        # Should have selected a target (one of the dead end doors)
-        assert strategy.next_goal_row is not None
-        assert strategy.next_goal_col is not None
+        # Target should be beyond east door (col + 2)
+        # The door tiles are at col 11, so target is at col 13
+        expected_target_col = 11 + 2
+        assert strategy.next_goal_col == expected_target_col, \
+            f"Strategy should target east door (LRU), got col {strategy.next_goal_col}"
 
-    def test_strategy_marks_door_as_dead_end_when_all_other_doors_are_dead_ends(self):
-        """Strategy marks entry door as dead end if all other doors in room are dead ends."""
-        dungeon = MockDungeon(3, 1)
+    def test_strategy_updates_lru_on_door_traversal(self):
+        """Strategy updates LRU tracking when hero passes through a door."""
+        dungeon = MockDungeon(2, 2)
 
-        # Room layout: [0] -- [1] -- [2]
-        # Room 0: east door
-        # Room 1: west door (to room 0), east door (to room 2)
-        # Room 2: west door only (dead end)
-        dungeon.add_door(0, 0, 0)  # Room 0 east
-        dungeon.add_door(0, 1, 2)  # Room 1 west
-        dungeon.add_door(0, 1, 0)  # Room 1 east
-        dungeon.add_door(0, 2, 2)  # Room 2 west
+        # Room 0 has east door
+        dungeon.add_door(0, 0, 0)  # East door: EAST_DOOR_NORTH at (4, 11)
 
-        # Start in room 1, having come from room 0
-        x, y = room_center(0, 1)
         strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
-        strategy.last_room_id = 0  # Came from room 0
-        strategy.last_door_direction = 0  # Through east door of room 0
 
-        # Mark the east door of room 1 as already a dead end
-        # (simulating that we already explored room 2)
-        strategy.mark_dead_end(1, 0)
+        # Hero is positioned on the east door (EAST_DOOR_NORTH tile)
+        door_row, door_col = 4, 11  # EAST_DOOR_NORTH position
+        x = door_col * TILE_SIZE + TILE_SIZE / 2
+        y = door_row * TILE_SIZE + TILE_SIZE / 2
 
-        # Now when entering room 1, it should see:
-        # - Entry door (west) - don't count this
-        # - East door - marked as dead end
-        # Since all non-entry doors are dead ends, entry door should be marked
+        # Call decide_next_move, which should update door tracking
+        strategy.decide_next_move(x, y, dungeon)
 
-        # Trigger the dead end check
-        strategy._check_and_mark_dead_end(x, y, dungeon, 0, 0)
-
-        # Room 0's east door should now be marked as dead end
-        assert strategy.is_dead_end(0, 0), \
-            "East door of room 0 should be marked as dead end (leads to room with only dead ends)"
+        # The northwest corner of this door is (4, 10)
+        east_door_nw = (4, 10)
+        assert east_door_nw in strategy.lru_doors, \
+            "Door should be tracked in lru_doors after traversal"
