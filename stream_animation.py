@@ -1,9 +1,11 @@
 import argparse
+import datetime
 import sys
 import os
 import random
 import glob
 from dungeon.animation import AssetManager
+from dungeon.setup import create_dungeon_with_priest, create_hero_with_priest_strategy
 from streaming import FFmpegStreamer
 from content import AudioClip, VideoProgram, TitleCard, DungeonWalk, VideoClip, RandomChoiceContent
 
@@ -79,8 +81,17 @@ def main():
     dungeon_audio_file = os.path.join("assets", "dungeon_audio", "drones.mp3")
     dungeon_audio = AudioClip(dungeon_audio_file, 0.2)
 
+    # Create dungeon with robot priest NPC
+    dungeon, priest = create_dungeon_with_priest(args.num_rooms)
+    hero = create_hero_with_priest_strategy(dungeon, priest)
+    dungeon.add_hero(hero)
+
+    # Create DungeonWalk with pre-configured dungeon
+    dungeon_walk = DungeonWalk(args.num_rooms, assets, random_video, dungeon_audio)
+    dungeon_walk.dungeon = dungeon
+
     video_program.add_content(random_title_card, 30.0)
-    video_program.add_content(DungeonWalk(args.num_rooms, assets, random_video, dungeon_audio), 120.0)
+    video_program.add_content(dungeon_walk, 120.0)
 
     video_program.start()
 

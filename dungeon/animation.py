@@ -110,6 +110,9 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
     # East
     'npc_east_0': {'x': 576, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
     'npc_east_1': {'x': 640, 'y': 128, 'w': 64, 'h': 64, 'file': 'sprites/spaceman_overworld_64x64.png'},
+
+    # Robot priest (large NPC: 128x192, logical base is bottom 128x64 = 2 tiles)
+    'robot_priest': {'x': 0, 'y': 0, 'w': 128, 'h': 192, 'file': 'sprites/npcs_01.png'},
 }
 
 # Static lookup for hero sprites: [direction][frame]
@@ -374,10 +377,21 @@ def render_npc(
     Render an NPC on the frame.
 
     Supports variable sprite sizes via npc.sprite_width and npc.sprite_height.
+    For large NPCs where sprite extends above the base, the sprite is aligned
+    so its bottom edge matches the bottom of the logical base.
+
+    NPC position (x, y) is the center of the logical base (base_width x base_height).
+    The sprite is centered horizontally on the base but aligned to the bottom.
     """
-    # Center sprite on NPC position
+    # Center sprite horizontally on base center
     npc_screen_x = int(npc.x - cam_x - npc.sprite_width / 2)
-    npc_screen_y = int(npc.y - cam_y - npc.sprite_height / 2)
+
+    # Align sprite bottom with base bottom
+    # base bottom = y + base_height/2
+    # sprite bottom should be at that point
+    # sprite top = sprite bottom - sprite_height
+    base_bottom = npc.y + npc.base_height / 2
+    npc_screen_y = int(base_bottom - cam_y - npc.sprite_height)
 
     try:
         sprite = assets.get_sprite(npc.sprite_name)

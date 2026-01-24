@@ -119,7 +119,6 @@ class Dungeon:
         only one tile for each door.
         """
         doors: List[Tuple[int, int]] = []
-        found_doors: set[int] = set()  # Track which directions we've found
 
         # Determine room bounds
         if room_id not in self.room_positions:
@@ -156,7 +155,7 @@ class Dungeon:
     def find_npc_at_tile(self, row: int, col: int) -> Optional[NPC]:
         """Find NPC occupying this tile (for strategy queries)."""
         for npc in self.npcs:
-            if npc.tile_row == row and npc.tile_col == col:
+            if npc.occupies_tile(row, col):
                 return npc
         return None
 
@@ -191,6 +190,19 @@ class Dungeon:
         dc = abs(col - target_col)
         # Adjacent means one step in cardinal direction (not diagonal)
         return (dr == 1 and dc == 0) or (dr == 0 and dc == 1)
+
+    def is_adjacent_to_npc(self, row: int, col: int, npc: NPC) -> bool:
+        """
+        Check if (row, col) is adjacent to any tile occupied by the NPC.
+
+        For multi-tile NPCs, this checks adjacency to any of the base tiles.
+        """
+        # Check all tiles occupied by the NPC
+        for npc_row in range(npc.tile_row, npc.tile_row + npc.base_tile_height):
+            for npc_col in range(npc.tile_col, npc.tile_col + npc.base_tile_width):
+                if self.is_adjacent_to_tile(row, col, npc_row, npc_col):
+                    return True
+        return False
 
 
 class Hero:

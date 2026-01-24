@@ -17,6 +17,7 @@ from .pathfinding import find_path_bfs
 
 if TYPE_CHECKING:
     from .npc import NPC
+    from .world import Dungeon
 
 # Re-export TILE_SIZE for convenience
 TILE_SIZE: int = 64
@@ -260,6 +261,159 @@ class GoalSeekingStrategy(Strategy):
             self.current_path = new_path
             self.path_index = 0
             self._path_target = (self.next_goal_row, self.next_goal_col)
+
+        # Follow the computed path
+        if self.current_path and self.path_index < len(self.current_path):
+            next_row, next_col = self.current_path[self.path_index]
+
+            # Determine direction based on next tile
+            if next_col > hero_col:
+                direction = 0  # East
+            elif next_col < hero_col:
+                direction = 2  # West
+            elif next_row > hero_row:
+                direction = 1  # South
+            else:
+                direction = 3  # North
+
+            target_x = next_col * TILE_SIZE + TILE_SIZE / 2
+            target_y = next_row * TILE_SIZE + TILE_SIZE / 2
+
+            self.path_index += 1
+
+            return MoveCommand(
+                target_x=target_x, target_y=target_y, direction=direction
+            )
+
+        return None
+
+
+class NPCSeekingStrategy(Strategy):
+    """
+    A strategy that visits a target NPC before seeking the goal.
+
+    The hero will:
+    1. Navigate to the target NPC
+    2. Interact with the NPC when adjacent
+    3. After interaction completes, switch to goal-seeking behavior
+    """
+
+    def __init__(
+        self,
+        target_npc: "NPC",
+        random_choice: Optional[
+            Callable[[List[Tuple[int, int]]], Tuple[int, int]]
+        ] = None,
+    ) -> None:
+        self.target_npc = target_npc
+        self.has_interacted = False
+
+        # Goal-seeking strategy for after NPC interaction
+        self.goal_strategy = GoalSeekingStrategy(random_choice=random_choice)
+
+        # Pathfinding state for NPC approach
+        self.current_path: Optional[List[Tuple[int, int]]] = None
+        self.path_index: int = 0
+        self._path_target: Optional[Tuple[int, int]] = None
+
+    def _find_approach_tile(self, dungeon: "Dungeon") -> Optional[Tuple[int, int]]:
+        """
+        Find a walkable tile adjacent to the NPC that the hero can stand on.
+
+        Prefers tiles south of the NPC (so hero faces north toward NPC).
+        """
+        npc = self.target_npc
+
+        # Check all tiles adjacent to the NPC's base
+        # Prefer south tiles first (so hero faces north)
+        candidates: List[Tuple[int, int]] = []
+
+        for npc_col in range(npc.tile_col, npc.tile_col + npc.base_tile_width):
+            # South of NPC (below)
+            south_row = npc.tile_row + npc.base_tile_height
+            if dungeon.is_tile_walkable(south_row, npc_col):
+                candidates.append((south_row, npc_col))
+
+        # If no south tiles, try other directions
+        if not candidates:
+            for npc_row in range(npc.tile_row, npc.tile_row + npc.base_tile_height):
+                # East
+                east_col = npc.tile_col + npc.base_tile_width
+                if dungeon.is_tile_walkable(npc_row, east_col):
+                    candidates.append((npc_row, east_col))
+                # West
+                west_col = npc.tile_col - 1
+                if dungeon.is_tile_walkable(npc_row, west_col):
+                    candidates.append((npc_row, west_col))
+
+            for npc_col in range(npc.tile_col, npc.tile_col + npc.base_tile_width):
+                # North
+                north_row = npc.tile_row - 1
+                if dungeon.is_tile_walkable(north_row, npc_col):
+                    candidates.append((north_row, npc_col))
+
+        return candidates[0] if candidates else None
+
+    def decide_next_move(
+        self,
+        x: float,
+        y: float,
+        dungeon: "Dungeon",
+    ) -> StrategyCommand:
+        """Decide the next move for a mob at position (x, y)."""
+        hero_col = int(x / TILE_SIZE)
+        hero_row = int(y / TILE_SIZE)
+
+        # If we've already interacted, delegate to goal strategy
+        if self.has_interacted:
+            return self.goal_strategy.decide_next_move(x, y, dungeon)
+
+        # Check if we're adjacent to the NPC
+        if dungeon.is_adjacent_to_npc(hero_row, hero_col, self.target_npc):
+            self.has_interacted = True
+            return InteractCommand(npc=self.target_npc)
+
+        # Navigate toward the NPC
+        approach_tile = self._find_approach_tile(dungeon)
+        if approach_tile is None:
+            # Can't find a way to approach NPC, fall back to goal seeking
+            print(
+                f"NPCSeekingStrategy: No approach tile found for NPC, switching to goal",
+                file=sys.stderr,
+            )
+            self.has_interacted = True
+            return self.goal_strategy.decide_next_move(x, y, dungeon)
+
+        target_row, target_col = approach_tile
+
+        # Check if we need to recompute path
+        should_recompute_path = (
+            self.current_path is None
+            or self.path_index >= len(self.current_path)
+            or self._path_target != (target_row, target_col)
+        )
+
+        if should_recompute_path:
+            new_path = find_path_bfs(
+                hero_row,
+                hero_col,
+                target_row,
+                target_col,
+                dungeon.is_tile_walkable,
+                max_distance=1000,
+            )
+            if new_path is None:
+                # Can't find path, switch to goal seeking
+                print(
+                    f"NPCSeekingStrategy: No path to NPC approach tile, switching to goal",
+                    file=sys.stderr,
+                )
+                self.has_interacted = True
+                return self.goal_strategy.decide_next_move(x, y, dungeon)
+
+            self.current_path = new_path
+            self.path_index = 0
+            self._path_target = (target_row, target_col)
 
         # Follow the computed path
         if self.current_path and self.path_index < len(self.current_path):
