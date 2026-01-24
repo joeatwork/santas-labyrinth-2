@@ -54,11 +54,6 @@ def create_robot_priest(
         x=x,
         y=y,
         sprite_name="robot_priest",
-        direction=1,  # Facing south
-        sprite_width=128,
-        sprite_height=192,
-        base_width=128,  # 2 tiles wide
-        base_height=64,  # 1 tile tall
         conversation_engine=conversation,
         npc_id="robot_priest",
     )

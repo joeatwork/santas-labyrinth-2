@@ -5,7 +5,7 @@ NPCs have a fixed position and can be interacted with to trigger conversations.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from .conversation import ConversationEngine
@@ -28,6 +28,10 @@ class NPC:
     Position (x, y) is the center of the logical base, not the sprite center.
     For a 128x192 sprite with a 128x64 base, the sprite extends 128 pixels
     above the base center.
+
+    The sprite attributes (width, height, offsets) are automatically extracted
+    from SPRITE_OFFSETS based on sprite_name. Base dimensions must be provided
+    explicitly as they define the logical footprint, not the visual appearance.
     """
 
     # Position in pixels (center of logical base)
@@ -38,14 +42,17 @@ class NPC:
     sprite_name: str  # Key into AssetManager sprites (e.g., 'npc_default')
     direction: int = 1  # 0=East, 1=South, 2=West, 3=North (default facing south)
 
-    # Sprite dimensions (for rendering)
-    sprite_width: int = 64
-    sprite_height: int = 64
-
     # Logical base dimensions (for collision/interaction)
-    # Default to sprite size for backwards compatibility
-    base_width: int = 64
-    base_height: int = 64
+    base_width: int = field(init=False)
+    base_height: int = field(init=False)
+
+    # Sprite dimensions (for rendering) - auto-populated from sprite_name
+    sprite_width: int = field(init=False)
+    sprite_height: int = field(init=False)
+
+    # Offsets - auto-populated from sprite_name
+    sprite_offset_x: int = field(init=False)
+    sprite_offset_y: int = field(init=False)
 
     # Conversation to trigger on interaction
     conversation_engine: Optional[ConversationEngine] = None
@@ -55,6 +62,21 @@ class NPC:
 
     # Room assignment (set by Dungeon when placed)
     room_id: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        """Extract sprite attributes from SPRITE_OFFSETS."""
+        from .animation import SPRITE_OFFSETS
+
+        if self.sprite_name not in SPRITE_OFFSETS:
+            raise KeyError(f"Sprite '{self.sprite_name}' not found in SPRITE_OFFSETS")
+
+        cfg = SPRITE_OFFSETS[self.sprite_name]
+        self.sprite_width = cfg["w"]
+        self.sprite_height = cfg["h"]
+        self.base_width = cfg.get("base_width", 64)
+        self.base_height = cfg.get("base_height", 64)
+        self.sprite_offset_x = cfg.get("offset_x", 0)
+        self.sprite_offset_y = cfg.get("offset_y", 0)
 
     @property
     def tile_col(self) -> int:

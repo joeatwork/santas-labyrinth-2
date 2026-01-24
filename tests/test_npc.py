@@ -44,16 +44,15 @@ class TestNPC:
         assert npc.sprite_height == 64
 
     def test_npc_custom_sprite_size(self):
-        """NPC accepts custom sprite dimensions."""
+        """NPC extracts sprite dimensions from SPRITE_OFFSETS."""
+        # robot_priest is 128x192 in SPRITE_OFFSETS
         npc = NPC(
             x=100.0,
             y=200.0,
-            sprite_name="big_npc",
-            sprite_width=128,
-            sprite_height=96,
+            sprite_name="robot_priest",
         )
         assert npc.sprite_width == 128
-        assert npc.sprite_height == 96
+        assert npc.sprite_height == 192
 
     def test_npc_tile_position(self):
         """NPC calculates tile position from pixel position."""
@@ -98,17 +97,18 @@ class TestMultiTileNPC:
 
     def test_custom_base_size(self):
         """NPC can have different base and sprite sizes."""
+        # robot_priest sprite is 128x192, but we specify a 128x64 base
         npc = NPC(
             x=100.0,
             y=100.0,
             sprite_name="robot_priest",
-            sprite_width=128,
-            sprite_height=192,
             base_width=128,
             base_height=64,
         )
+        # Sprite dimensions come from SPRITE_OFFSETS
         assert npc.sprite_width == 128
         assert npc.sprite_height == 192
+        # Base dimensions are explicitly specified
         assert npc.base_width == 128
         assert npc.base_height == 64
 
