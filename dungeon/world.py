@@ -108,6 +108,43 @@ class Dungeon:
             return self.map[row, col] == Tile.GOAL
         return False
 
+    def place_goal(self, room_id: int) -> Tuple[int, int]:
+        """
+        Place the goal tile in the specified room.
+
+        If a goal already exists, it is removed first.
+
+        Args:
+            room_id: The room to place the goal in.
+
+        Returns:
+            (col, row) tile coordinates where the goal was placed.
+
+        Raises:
+            RuntimeError: If the room doesn't exist or no suitable floor tile can be found.
+        """
+        from .dungeon_gen import find_floor_tile_in_room, Position
+
+        # Remove existing goal if present
+        for row in range(self.rows):
+            for col in range(self.cols):
+                if self.map[row, col] == Tile.GOAL:
+                    self.map[row, col] = Tile.FLOOR
+
+        if room_id not in self.room_positions:
+            raise RuntimeError(f"Room {room_id} does not exist")
+
+        # Get room position and template
+        pos_col, pos_row = self.room_positions[room_id]
+        template = self.room_templates[room_id]
+        room_pos = Position(row=pos_row, column=pos_col)
+
+        # Find a floor tile in the room
+        goal_pos = find_floor_tile_in_room(self.map, room_pos, template)
+        self.map[goal_pos.row, goal_pos.column] = Tile.GOAL
+
+        return (goal_pos.column, goal_pos.row)
+
     def distance_to_goal(self, x: float, y: float) -> float:
         """Returns Euclidean distance in pixels from position (x, y) to the goal."""
         goal_pos = self.find_goal_position()

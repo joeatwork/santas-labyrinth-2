@@ -20,6 +20,7 @@ from dungeon.animation import (
     render_npc,
 )
 from dungeon.world import Dungeon, Hero
+from dungeon.npc import NPC
 from dungeon.conversation_overlay import ConversationOverlay
 
 
@@ -362,6 +363,7 @@ class DungeonWalk(Content):
 
         # Conversation state
         self.conversation_overlay: Optional[ConversationOverlay] = None
+        self.conversation_npc: Optional["NPC"] = None  # Track which NPC is being talked to
 
     def enter(self) -> None:
         # Generate a new dungeon each time we enter
@@ -404,7 +406,11 @@ class DungeonWalk(Content):
                 self.ambient_audio.update(dt)
             self.conversation_overlay.update(dt)
             if self.conversation_overlay.is_complete():
+                # Call NPC callback before clearing state
+                if self.conversation_npc and self.conversation_npc.on_conversation_complete:
+                    self.conversation_npc.on_conversation_complete()
                 self.conversation_overlay = None
+                self.conversation_npc = None
                 if self.hero:
                     self.hero.end_conversation()
             return
@@ -447,6 +453,7 @@ class DungeonWalk(Content):
             if interact_cmd is not None:
                 # Hero entered 'talking' state, start conversation overlay
                 if interact_cmd.npc.conversation_engine is not None:
+                    self.conversation_npc = interact_cmd.npc
                     self.conversation_overlay = ConversationOverlay(
                         interact_cmd.npc.conversation_engine,
                         self.assets
@@ -482,16 +489,14 @@ class DungeonWalk(Content):
             cam_x = max(0, min(cam_x, map_w - width))
             cam_y = max(0, min(cam_y, map_h - height))
 
-            # Render base frame with hero and foreground
-            base_frame = render_frame_camera(
-                self.background, self.assets, self.hero, width, height, self.foreground
-            )
+            # TODO: goal should just be another npc
+            goal_position = self.dungeon.find_goal_position()
 
-            # Render NPCs (drawn on top of hero but under foreground)
-            # Note: For proper layering, NPCs should be rendered before foreground
-            # but render_frame_camera already applies foreground. This is a simplification.
-            for npc in self.dungeon.npcs:
-                render_npc(base_frame, npc, self.assets, cam_x, cam_y)
+            # Render base frame with hero and foreground
+            # TODO: npcs and goal should be rendered as part of render_frame_camera
+            base_frame = render_frame_camera(
+                self.background, self.assets, self.hero, self.dungeon.npcs, goal_position, width, height, self.foreground
+            )
         else:
             base_frame = np.zeros((height, width, 3), np.uint8)
 

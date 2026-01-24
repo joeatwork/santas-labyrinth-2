@@ -6,7 +6,7 @@ NPCs have a fixed position and can be interacted with to trigger conversations.
 
 import math
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Callable
 
 from .conversation import ConversationEngine
 
@@ -56,6 +56,11 @@ class NPC:
 
     # Conversation to trigger on interaction
     conversation_engine: Optional[ConversationEngine] = None
+
+    # Callback invoked when conversation with this NPC completes
+    # Receives no arguments; use closure to capture needed state
+    # TODO: should on_conversation_complete live in a ConversationEngine?
+    on_conversation_complete: Optional[Callable[[], None]] = field(default=None, repr=False)
 
     # Unique identifier for tracking interaction state
     npc_id: str = ""

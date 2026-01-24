@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from PIL import ImageFont
 from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
-from typing import Dict, Any, Optional, Tuple, Protocol, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, Tuple, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from dungeon.npc import NPC
@@ -432,8 +432,6 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.DECORATIVE_NORTH_WALL_1: "decorative_north_wall_1",
     Tile.DECORATIVE_NORTH_WALL_2: "decorative_north_wall_2",
     Tile.DECORATIVE_NORTH_WALL_3: "decorative_north_wall_3",
-    Tile.GOAL: "goal",
-    # Door tiles render as floor
     Tile.NORTH_DOOR_WEST: "north_door_floor",
     Tile.NORTH_DOOR_EAST: "north_door_floor",
     Tile.SOUTH_DOOR_WEST: "south_door_floor",
@@ -442,6 +440,8 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.WEST_DOOR_SOUTH: "west_door_floor",
     Tile.EAST_DOOR_NORTH: "east_door_floor",
     Tile.EAST_DOOR_SOUTH: "east_door_floor",
+    # TODO GOAL should not be a tile, it should be an NPC
+    Tile.GOAL: "floor",
     Tile.NOTHING: None,
 }
 
@@ -564,10 +564,6 @@ def create_dungeon_background(dungeon_map: DungeonMap, assets: AssetManager) -> 
             sprite_name = TILE_MAP.get(tile_type)
 
             if sprite_name:
-                # For goal tile, render floor underneath first (heart has transparent bg)
-                if tile_type == Tile.GOAL:
-                    floor_sprite = assets.get_sprite("floor")
-                    overlay_image(bg, floor_sprite, c * TILE_SIZE, r * TILE_SIZE)
                 sprite = assets.get_sprite(sprite_name)
                 # sprite is guaranteed Image by type hint, but might fail logic if key missing
                 # get_sprite raises keyerror if missing, so we are safe assuming returns Image
@@ -613,6 +609,9 @@ def render_frame_camera(
     bg_image: Image,
     assets: AssetManager,
     hero: HeroLike,
+    npcs: List["NPC"],
+    # goal_position is a pixel position x, y
+    goal_position: Optional[Tuple[int, int]],
     view_width: int,
     view_height: int,
     fg_image: Optional[Image] = None,
@@ -641,23 +640,30 @@ def render_frame_camera(
         crop = bg_image[cam_y : cam_y + view_height, cam_x : cam_x + view_width]
         frame[: crop.shape[0], : crop.shape[1]] = crop
 
+    # TODO: this is a hack, the Goal should just be another NPC!
+    if goal_position:
+        goal_sprite = assets.get_sprite("goal")
+        print(f"rendering goal sprite at {goal_position}", file=sys.stderr)
+        goal_screen_x = goal_position[0] - cam_x
+        goal_screen_y = goal_position[1] - cam_y
+        overlay_image(frame, goal_sprite, goal_screen_x, goal_screen_y)
+
     # Draw Hero relative to camera
     hero_screen_x = int(hero.x - cam_x - TILE_SIZE / 2)
     hero_screen_y = int(hero.y - cam_y - TILE_SIZE / 2)
 
     # Determine sprite based on direction and animation frame
     # Lookup sprite name from static table
-    try:
-        sprite_name = HERO_WALK_CYCLES[hero.direction][hero.walk_frame]
-    except IndexError:
-        # Fallback
-        sprite_name = HERO_WALK_CYCLES[hero.direction][0]
+    sprite_name = HERO_WALK_CYCLES[hero.direction][hero.walk_frame]
+    hero_sprite = assets.get_sprite(sprite_name)
+    overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
 
-    try:
-        hero_sprite = assets.get_sprite(sprite_name)
-        overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
-    except KeyError:
-        pass  # Should not happen with correct data
+    # TODO: npc sprites should be interleaved with the hero and the goal
+    # sorted by Y coordinates, and rendered lowest Y first.
+    # We can also crop and shift the NPCs inline rather than call a
+    # separate render_npc function.
+    for friend in npcs:
+        render_npc(frame, friend, assets, cam_x, cam_y)
 
     # Draw foreground layer (doorframe arches) on top of hero
     if fg_image is not None:
@@ -668,7 +674,7 @@ def render_frame_camera(
 
     return frame
 
-
+# TODO: inline this into render_frame_camera
 def render_npc(
     frame: Image,
     npc: "NPC",

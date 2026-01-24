@@ -5,7 +5,7 @@ import os
 import random
 import glob
 from dungeon.animation import AssetManager
-from dungeon.setup import create_dungeon_with_priest, create_hero_with_priest_strategy
+from dungeon.setup import create_dungeon_with_priest
 from streaming import FFmpegStreamer
 from content import AudioClip, VideoProgram, TitleCard, DungeonWalk, VideoClip, RandomChoiceContent
 
@@ -31,7 +31,7 @@ def main():
         "--seed", type=int, default=None, help="Random seed for reproducibility"
     )
     parser.add_argument(
-        "--num-rooms", type=int, default=20, help="Number of rooms in dungeon"
+        "--num-rooms", type=int, default=18, help="Number of rooms in dungeon"
     )
     args = parser.parse_args()
 
@@ -83,15 +83,13 @@ def main():
 
     # Create a dungeon generator that produces a new dungeon with priest NPC each time
     def make_dungeon_with_priest():
-        dungeon, priest = create_dungeon_with_priest(args.num_rooms)
-        hero = create_hero_with_priest_strategy(dungeon, priest)
-        dungeon.add_hero(hero)
+        dungeon, _priest, _hero = create_dungeon_with_priest(args.num_rooms)
         return dungeon
 
     dungeon_walk = DungeonWalk(make_dungeon_with_priest, assets, random_video, dungeon_audio)
 
     video_program.add_content(random_title_card, 30.0)
-    video_program.add_content(dungeon_walk, 120.0)
+    video_program.add_content(dungeon_walk, 180.0)
 
     video_program.start()
 

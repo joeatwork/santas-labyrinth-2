@@ -2,7 +2,8 @@
 Dungeon setup utilities for creating pre-configured dungeons with NPCs.
 """
 
-from typing import Optional
+import random
+from typing import Optional, Callable
 
 from .conversation import ConversationPage, ScriptedConversation
 from .npc import NPC, TILE_SIZE
@@ -32,20 +33,35 @@ def create_robot_priest(
     conversation = ScriptedConversation(
         [
             ConversationPage(
-                text=" ".join(["Greetings, traveler! I bless you on your quest!"]),
+                text=" ".join(
+                    [
+                        "Greetings, traveler! I bless you on your quest!",
+                        "I will cause the sacred crystal to appear somewhere in this place.",
+                        "look for it and recieve your prize!",
+                    ]
+                ),
                 speaker="Placeholder Robot Priest",
-                duration=4.0,
+                duration=3.0,
+            ),
+            ConversationPage(
+                text=" ".join(
+                    [
+                        "The prize is a lil' cut scene. We're still working on it,",
+                        "it might not have as much context as we'd like right now.",
+                    ]
+                ),
+                speaker="Placeholder Robot Priest",
+                duration=3.0,
             ),
             ConversationPage(
                 text=" ".join(
                     [
                         "We're still in an alpha release, so we'd appreciate it",
-                        "if you'd report any bugs you find. Please tell Buck",
-                        "Rogers hello if you happen to see him.",
+                        "if you'd report any bugs you find.",
                     ]
                 ),
-                speaker="Robot Priest",
-                duration=4.0,
+                speaker="Placeholder Robot Priest",
+                duration=3.0,
             ),
         ]
     )
@@ -127,14 +143,19 @@ def find_floor_tile_in_room(
     return None
 
 
-def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC]:
+def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC, Hero]:
     """
-    Create a dungeon with a robot priest NPC in the second room (room 1).
+    Create a dungeon with a robot priest NPC and a hero.
+
+    The dungeon is generated without a goal. When the hero talks to the priest,
+    the priest places the goal in a randomly selected room and the hero's
+    search state is reset so it can find the newly placed goal.
 
     Returns:
-        Tuple of (dungeon, priest_npc)
+        Tuple of (dungeon, priest_npc, hero)
     """
-    dungeon = create_random_dungeon(num_rooms)
+    # Generate dungeon without goal - priest will place it after conversation
+    dungeon = create_random_dungeon(num_rooms, place_goal=False)
 
     # Find a suitable position in room 1 (second room)
     priest_pos = find_floor_tile_in_room(dungeon, room_id=1)
@@ -150,21 +171,23 @@ def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC]:
     priest = create_robot_priest(col, row)
     dungeon.add_npc(priest)
 
-    return dungeon, priest
-
-
-# TODO: creaet_hero_with_priest_strategy is useless, inline it.
-def create_hero_with_priest_strategy(
-    dungeon: Dungeon,
-    priest: NPC,
-) -> Hero:
-    """
-    Create a hero that will seek out the priest before heading to the goal.
-    """
+    # Create hero with goal-seeking strategy
     strategy = GoalSeekingStrategy()
     hero = Hero(
         x=dungeon.start_pos[0],
         y=dungeon.start_pos[1],
         strategy=strategy,
     )
-    return hero
+    dungeon.add_hero(hero)
+
+    # Set up callback: when conversation completes, place goal and reset hero's search
+    def on_priest_conversation_complete() -> None:
+        # Pick a random room for the goal (excluding room 0 where hero starts)
+        available_rooms = [r for r in dungeon.room_positions.keys() if r != 0]
+        goal_room = random.choice(available_rooms)
+        dungeon.place_goal(goal_room)
+        strategy.reset_search_state()
+
+    priest.on_conversation_complete = on_priest_conversation_complete
+
+    return dungeon, priest, hero

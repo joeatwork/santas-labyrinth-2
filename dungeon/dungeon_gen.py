@@ -649,7 +649,10 @@ def _crop_dungeon_map(dungeon_map: np.ndarray) -> Tuple[np.ndarray, Position]:
     return cropped, Position(row=min_row, column=min_col)
 
 
-def generate_dungeon(num_rooms: int) -> Tuple[
+def generate_dungeon(
+    num_rooms: int,
+    place_goal: bool = True,
+) -> Tuple[
     DungeonMap,
     Tuple[int, int],
     Dict[int, Tuple[int, int]],
@@ -662,6 +665,8 @@ def generate_dungeon(num_rooms: int) -> Tuple[
 
     Parameters:
         num_rooms: Target number of rooms to generate
+        place_goal: If True, place the goal tile in the last room.
+                    If False, no goal is placed (can be added later via Dungeon.place_goal()).
 
     Returns:
         dungeon_map: The tile map
@@ -799,11 +804,12 @@ def generate_dungeon(num_rooms: int) -> Tuple[
         next_room_id += 1
 
     # Place goal in the last room added, ensuring it's on a FLOOR tile
-    goal_room_id = last_room_id
-    goal_pos = room_positions[goal_room_id]
-    goal_template = room_assignments[goal_room_id]
-    goal_floor_pos = find_floor_tile_in_room(dungeon_map, goal_pos, goal_template)
-    dungeon_map[goal_floor_pos.row, goal_floor_pos.column] = Tile.GOAL
+    if place_goal:
+        goal_room_id = last_room_id
+        goal_pos = room_positions[goal_room_id]
+        goal_template = room_assignments[goal_room_id]
+        goal_floor_pos = find_floor_tile_in_room(dungeon_map, goal_pos, goal_template)
+        dungeon_map[goal_floor_pos.row, goal_floor_pos.column] = Tile.GOAL
 
     # Replace all unconnected doors with walls
     _replace_blind_doors_with_walls(
@@ -835,17 +841,24 @@ def generate_dungeon(num_rooms: int) -> Tuple[
     return dungeon_map, start_pos_pixel, room_positions_final, room_assignments
 
 
-def create_random_dungeon(num_rooms: int) -> "Dungeon":
+def create_random_dungeon(
+    num_rooms: int,
+    place_goal: bool = True,
+) -> "Dungeon":
     """
     Factory function to create a randomly generated dungeon.
 
     Parameters:
         num_rooms: Target number of rooms to generate
+        place_goal: If True, place the goal tile in the last room.
+                    If False, no goal is placed (can be added later via Dungeon.place_goal()).
 
     Returns:
         A Dungeon instance with the generated map and layout
     """
     from .world import Dungeon
 
-    dungeon_map, start_pos, room_positions, room_templates = generate_dungeon(num_rooms)
+    dungeon_map, start_pos, room_positions, room_templates = generate_dungeon(
+        num_rooms, place_goal=place_goal
+    )
     return Dungeon(dungeon_map, start_pos, room_positions, room_templates)

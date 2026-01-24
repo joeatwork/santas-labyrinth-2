@@ -113,6 +113,20 @@ class GoalSeekingStrategy(Strategy):
             lambda lst: lst[np.random.randint(0, len(lst))]
         )
 
+    def reset_search_state(self) -> None:
+        """
+        Reset the strategy's search state.
+
+        Clears the LRU door tracking and path state. Call this when the dungeon
+        changes (e.g., when a goal is placed) to allow re-exploration.
+        """
+        self.lru_doors.clear()
+        self.next_goal_row = None
+        self.next_goal_col = None
+        self.current_path = None
+        self.path_index = 0
+        self._path_target = None
+
     def _find_door_northwest_corner(
         self, row: int, col: int, dungeon: "Dungeon"
     ) -> Optional[Tuple[int, int]]:
