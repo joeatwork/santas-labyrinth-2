@@ -6,7 +6,7 @@ from typing import Optional
 
 from .conversation import ConversationPage, ScriptedConversation
 from .npc import NPC, TILE_SIZE
-from .strategy import NPCSeekingStrategy
+from .strategy import GoalSeekingStrategy
 from .dungeon_gen import create_random_dungeon
 from .world import Dungeon, Hero
 
@@ -33,7 +33,7 @@ def create_robot_priest(
         [
             ConversationPage(
                 text=" ".join(["Greetings, traveler! I bless you on your quest!"]),
-                speaker="Robot Priest",
+                speaker="Placeholder Robot Priest",
                 duration=4.0,
             ),
             ConversationPage(
@@ -158,6 +158,7 @@ def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC]:
     return dungeon, priest
 
 
+# TODO: creaet_hero_with_priest_strategy is useless, inline it.
 def create_hero_with_priest_strategy(
     dungeon: Dungeon,
     priest: NPC,
@@ -165,7 +166,7 @@ def create_hero_with_priest_strategy(
     """
     Create a hero that will seek out the priest before heading to the goal.
     """
-    strategy = NPCSeekingStrategy(target_npc=priest)
+    strategy = GoalSeekingStrategy()
     hero = Hero(
         x=dungeon.start_pos[0],
         y=dungeon.start_pos[1],

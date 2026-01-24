@@ -95,6 +95,10 @@ class GoalSeekingStrategy(Strategy):
         # Keep track of the doors we've traversed, most recent last
         self.lru_doors: OrderedDict[Tuple[int, int], None] = OrderedDict()
 
+        # Keep track of everyone we've talked to
+        # by npc_id
+        self.npcs_met: Set[str] = set()
+
         # Target tile (row, col)
         self.next_goal_row: Optional[int] = None
         self.next_goal_col: Optional[int] = None
@@ -149,13 +153,23 @@ class GoalSeekingStrategy(Strategy):
                 self.lru_doors[current_door] = None
 
     def _select_target(self, x: float, y: float, dungeon: "Dungeon") -> None:
-        """Select a new target tile if we don't have one."""
+        """Select a new target tile if we don't have one. x and y are pixel positions."""
         self.next_goal_row = None
         self.next_goal_col = None
 
         current_room = dungeon.get_room_id(x, y)
 
-        # First, check if goal is in the same room
+        # check if there is anyone to talk to
+        npcs_around = dungeon.get_npcs_in_room(current_room)
+        new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met]
+        for friend in new_npcs:
+            approach = self._find_npc_approach_tile(friend, dungeon)
+            if approach is not None:
+                self.next_goal_row, self.next_goal_col = approach
+                return
+
+
+        # check if goal is in the same room
         goal_pos = dungeon.find_goal_position()
         if goal_pos:
             goal_room = dungeon.get_room_id(goal_pos[0], goal_pos[1])
@@ -211,119 +225,13 @@ class GoalSeekingStrategy(Strategy):
         else:
             raise RuntimeError(f"bug identifying door, {chosen_door} is {door_tile}")
 
-    def decide_next_move(
-        self,
-        x: float,
-        y: float,
-        dungeon: "Dungeon",
-    ) -> StrategyCommand:
-        """Decide the next move for a mob at position (x, y)."""
-        hero_col = int(x / TILE_SIZE)
-        hero_row = int(y / TILE_SIZE)
-
-        # Track door crossings
-        self._update_door_tracking(hero_row, hero_col, dungeon)
-
-        # Check if we reached our target
-        if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
-            self.next_goal_row = None
-            self.next_goal_col = None
-            self.current_path = None
-            self.path_index = 0
-            self._path_target = None
-
-        # Select a new target if needed
-        if self.next_goal_row is None or self.next_goal_col is None:
-            self._select_target(x, y, dungeon)
-
-        # Compute path if needed
-        should_recompute_path = (
-            self.current_path is None
-            or self.path_index >= len(self.current_path)
-            or self._path_target != (self.next_goal_row, self.next_goal_col)
-        )
-
-        if should_recompute_path:
-            new_path = find_path_bfs(
-                hero_row,
-                hero_col,
-                self.next_goal_row,
-                self.next_goal_col,
-                dungeon.is_tile_walkable,
-                max_distance=1000,
-            )
-            if new_path is None:
-                raise ValueError(
-                    f"Could not find path to target ({self.next_goal_row}, {self.next_goal_col}) "
-                    f"from ({hero_row}, {hero_col})"
-                )
-
-            self.current_path = new_path
-            self.path_index = 0
-            self._path_target = (self.next_goal_row, self.next_goal_col)
-
-        # Follow the computed path
-        if self.current_path and self.path_index < len(self.current_path):
-            next_row, next_col = self.current_path[self.path_index]
-
-            # Determine direction based on next tile
-            if next_col > hero_col:
-                direction = 0  # East
-            elif next_col < hero_col:
-                direction = 2  # West
-            elif next_row > hero_row:
-                direction = 1  # South
-            else:
-                direction = 3  # North
-
-            target_x = next_col * TILE_SIZE + TILE_SIZE / 2
-            target_y = next_row * TILE_SIZE + TILE_SIZE / 2
-
-            self.path_index += 1
-
-            return MoveCommand(
-                target_x=target_x, target_y=target_y, direction=direction
-            )
-
-        return None
-
-
-class NPCSeekingStrategy(Strategy):
-    """
-    A strategy that visits a target NPC before seeking the goal.
-
-    The hero will:
-    1. Navigate to the target NPC
-    2. Interact with the NPC when adjacent
-    3. After interaction completes, switch to goal-seeking behavior
-    """
-
-    def __init__(
-        self,
-        target_npc: "NPC",
-        random_choice: Optional[
-            Callable[[List[Tuple[int, int]]], Tuple[int, int]]
-        ] = None,
-    ) -> None:
-        self.target_npc = target_npc
-        self.has_interacted = False
-
-        # Goal-seeking strategy for after NPC interaction
-        self.goal_strategy = GoalSeekingStrategy(random_choice=random_choice)
-
-        # Pathfinding state for NPC approach
-        self.current_path: Optional[List[Tuple[int, int]]] = None
-        self.path_index: int = 0
-        self._path_target: Optional[Tuple[int, int]] = None
-
-    def _find_approach_tile(self, dungeon: "Dungeon") -> Optional[Tuple[int, int]]:
+    def _find_npc_approach_tile(self, npc, dungeon: "Dungeon") -> Optional[Tuple[int, int]]:
         """
         Find a walkable tile adjacent to the NPC that the hero can stand on.
 
         Prefers tiles south of the NPC (so hero faces north toward NPC).
+        Returns (row, col)
         """
-        npc = self.target_npc
-
         # Check all tiles adjacent to the NPC's base
         # Prefer south tiles first (so hero faces north)
         candidates: List[Tuple[int, int]] = []
@@ -354,6 +262,7 @@ class NPCSeekingStrategy(Strategy):
 
         return candidates[0] if candidates else None
 
+
     def decide_next_move(
         self,
         x: float,
@@ -364,56 +273,55 @@ class NPCSeekingStrategy(Strategy):
         hero_col = int(x / TILE_SIZE)
         hero_row = int(y / TILE_SIZE)
 
-        # If we've already interacted, delegate to goal strategy
-        if self.has_interacted:
-            return self.goal_strategy.decide_next_move(x, y, dungeon)
+        # Track door crossings
+        self._update_door_tracking(hero_row, hero_col, dungeon)
 
-        # Check if we're adjacent to the NPC
-        if dungeon.is_adjacent_to_npc(hero_row, hero_col, self.target_npc):
-            self.has_interacted = True
-            return InteractCommand(npc=self.target_npc)
+        # Check if we reached our target
+        if hero_row == self.next_goal_row and hero_col == self.next_goal_col:
+            self.next_goal_row = None
+            self.next_goal_col = None
+            self.current_path = None
+            self.path_index = 0
+            self._path_target = None
 
-        # Navigate toward the NPC
-        approach_tile = self._find_approach_tile(dungeon)
-        if approach_tile is None:
-            # Can't find a way to approach NPC, fall back to goal seeking
-            print(
-                f"NPCSeekingStrategy: No approach tile found for NPC, switching to goal",
-                file=sys.stderr,
-            )
-            self.has_interacted = True
-            return self.goal_strategy.decide_next_move(x, y, dungeon)
+        # Check if we have an available conversation
+        room_id = dungeon.get_room_id_for_tile(hero_row, hero_col)
+        npcs_around = dungeon.get_npcs_in_room(room_id)
+        new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met]
+        for friend in new_npcs:
+            if dungeon.is_adjacent_to_npc(hero_row, hero_col, friend):
+                self.npcs_met.add(friend.npc_id)
+                return InteractCommand(friend)             
 
-        target_row, target_col = approach_tile
+        # Select a new target if needed
+        if self.next_goal_row is None or self.next_goal_col is None:
+            self._select_target(x, y, dungeon)
 
-        # Check if we need to recompute path
+        # Compute path if needed
         should_recompute_path = (
             self.current_path is None
             or self.path_index >= len(self.current_path)
-            or self._path_target != (target_row, target_col)
+            or self._path_target != (self.next_goal_row, self.next_goal_col)
         )
 
         if should_recompute_path:
             new_path = find_path_bfs(
                 hero_row,
                 hero_col,
-                target_row,
-                target_col,
+                self.next_goal_row,
+                self.next_goal_col,
                 dungeon.is_tile_walkable,
                 max_distance=1000,
             )
             if new_path is None:
-                # Can't find path, switch to goal seeking
-                print(
-                    f"NPCSeekingStrategy: No path to NPC approach tile, switching to goal",
-                    file=sys.stderr,
+                raise ValueError(
+                    f"Could not find path to target ({self.next_goal_row}, {self.next_goal_col}) "
+                    f"from ({hero_row}, {hero_col})"
                 )
-                self.has_interacted = True
-                return self.goal_strategy.decide_next_move(x, y, dungeon)
 
             self.current_path = new_path
             self.path_index = 0
-            self._path_target = (target_row, target_col)
+            self._path_target = (self.next_goal_row, self.next_goal_col)
 
         # Follow the computed path
         if self.current_path and self.path_index < len(self.current_path):

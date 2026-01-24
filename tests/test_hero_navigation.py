@@ -6,7 +6,9 @@ from typing import List, Tuple, Optional, Dict
 
 from dungeon.dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
 from dungeon.world import Hero, Dungeon, TILE_SIZE
-from dungeon.strategy import Strategy, GoalSeekingStrategy, MoveCommand
+from dungeon.strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
+from dungeon.npc import NPC
+from dungeon.conversation import ConversationPage, ScriptedConversation
 
 
 class MockStrategy(Strategy):
@@ -47,6 +49,9 @@ class MockDungeon:
         # Maps (tile_row, tile_col) -> room_id (int)
         # If not in map, assumed to be corridor/nothing
         self._tile_to_room: Dict[Tuple[int, int], int] = {}
+
+        # NPC tracking
+        self.npcs: List[NPC] = []
 
         # Fill all rooms with floor by default
         for r in range(self.rows):
@@ -175,6 +180,30 @@ class MockDungeon:
                         doors.append((tile_row, tile_col))
 
         return doors
+
+    def get_room_id_for_tile(self, row: int, col: int) -> int:
+        """Return room id for row, column tile."""
+        if (row, col) in self._tile_to_room:
+            return self._tile_to_room[(row, col)]
+        room_row = row // ROOM_HEIGHT
+        room_col = col // ROOM_WIDTH
+        return room_row * self.rooms_wide + room_col
+
+    def get_npcs_in_room(self, room_id: int) -> List[NPC]:
+        """Get all NPCs in a specific room."""
+        return [npc for npc in self.npcs if npc.room_id == room_id]
+
+    def is_adjacent_to_npc(self, row: int, col: int, npc: NPC) -> bool:
+        """Check if (row, col) is adjacent to any tile occupied by the NPC."""
+        for npc_row in range(npc.tile_row, npc.tile_row + npc.base_tile_height):
+            for npc_col in range(npc.tile_col, npc.tile_col + npc.base_tile_width):
+                if self._is_adjacent_to_tile(row, col, npc_row, npc_col):
+                    return True
+        return False
+
+    def _is_adjacent_to_tile(self, row1: int, col1: int, row2: int, col2: int) -> bool:
+        """Check if two tiles are adjacent (including diagonals)."""
+        return abs(row1 - row2) <= 1 and abs(col1 - col2) <= 1 and (row1, col1) != (row2, col2)
 
 
 def tile_center(tile_row: int, tile_col: int) -> Tuple[float, float]:
@@ -386,3 +415,151 @@ class TestStrategyLRUDoorTracking:
         east_door_nw = (4, 10)
         assert east_door_nw in strategy.lru_doors, \
             "Door should be tracked in lru_doors after traversal"
+
+
+def make_test_conversation():
+    """Create a simple conversation for testing."""
+    return ScriptedConversation(
+        [ConversationPage(text="Hello!", speaker="npc")]
+    )
+
+
+class TestStrategyNPCSeeking:
+    """Test GoalSeekingStrategy NPC interaction behavior."""
+
+    def test_returns_interact_when_adjacent_to_npc(self):
+        """Strategy returns InteractCommand when hero is adjacent to NPC."""
+        dungeon = MockDungeon(1, 1)
+
+        # Place NPC at tile (5, 5)
+        npc_row, npc_col = 5, 5
+        npc = NPC(
+            x=npc_col * TILE_SIZE + TILE_SIZE / 2,
+            y=npc_row * TILE_SIZE + TILE_SIZE / 2,
+            sprite_name="npc_default",
+            npc_id="test_npc",
+            conversation_engine=make_test_conversation(),
+        )
+        dungeon.npcs = [npc]
+        npc.room_id = 0
+
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+
+        # Place hero adjacent to NPC (one tile south)
+        hero_row, hero_col = npc_row + 1, npc_col
+        hero_x, hero_y = tile_center(hero_row, hero_col)
+
+        command = strategy.decide_next_move(hero_x, hero_y, dungeon)
+
+        assert isinstance(command, InteractCommand)
+        assert command.npc is npc
+
+    def test_returns_move_when_npc_not_adjacent(self):
+        """Strategy returns MoveCommand when hero is not adjacent to NPC."""
+        dungeon = MockDungeon(1, 1)
+
+        # Place NPC at tile (3, 3)
+        npc_row, npc_col = 3, 3
+        npc = NPC(
+            x=npc_col * TILE_SIZE + TILE_SIZE / 2,
+            y=npc_row * TILE_SIZE + TILE_SIZE / 2,
+            sprite_name="npc_default",
+            npc_id="test_npc",
+            conversation_engine=make_test_conversation(),
+        )
+        dungeon.npcs = [npc]
+        npc.room_id = 0
+
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+
+        # Place hero far from NPC
+        hero_row, hero_col = 7, 7
+        hero_x, hero_y = tile_center(hero_row, hero_col)
+
+        command = strategy.decide_next_move(hero_x, hero_y, dungeon)
+
+        assert isinstance(command, MoveCommand)
+
+    def test_does_not_interact_with_already_met_npc(self):
+        """Strategy ignores NPCs that have already been interacted with."""
+        dungeon = MockDungeon(1, 1)
+        dungeon.set_goal(8, 8)
+
+        # Place NPC at tile (5, 5)
+        npc_row, npc_col = 5, 5
+        npc = NPC(
+            x=npc_col * TILE_SIZE + TILE_SIZE / 2,
+            y=npc_row * TILE_SIZE + TILE_SIZE / 2,
+            sprite_name="npc_default",
+            npc_id="test_npc",
+            conversation_engine=make_test_conversation(),
+        )
+        dungeon.npcs = [npc]
+        npc.room_id = 0
+
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+        # Mark NPC as already met
+        strategy.npcs_met.add("test_npc")
+
+        # Place hero adjacent to NPC
+        hero_row, hero_col = npc_row + 1, npc_col
+        hero_x, hero_y = tile_center(hero_row, hero_col)
+
+        command = strategy.decide_next_move(hero_x, hero_y, dungeon)
+
+        # Should get MoveCommand toward goal, not InteractCommand
+        assert isinstance(command, MoveCommand)
+
+    def test_tracks_npc_after_interaction(self):
+        """Strategy adds NPC to npcs_met after returning InteractCommand."""
+        dungeon = MockDungeon(1, 1)
+
+        npc_row, npc_col = 5, 5
+        npc = NPC(
+            x=npc_col * TILE_SIZE + TILE_SIZE / 2,
+            y=npc_row * TILE_SIZE + TILE_SIZE / 2,
+            sprite_name="npc_default",
+            npc_id="test_npc",
+            conversation_engine=make_test_conversation(),
+        )
+        dungeon.npcs = [npc]
+        npc.room_id = 0
+
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+
+        # Place hero adjacent to NPC
+        hero_row, hero_col = npc_row + 1, npc_col
+        hero_x, hero_y = tile_center(hero_row, hero_col)
+
+        strategy.decide_next_move(hero_x, hero_y, dungeon)
+
+        assert "test_npc" in strategy.npcs_met
+
+    def test_approaches_multi_tile_npc(self):
+        """Strategy can interact with multi-tile NPCs from adjacent tile."""
+        dungeon = MockDungeon(1, 1)
+
+        # Create 2-tile-wide NPC at tiles (4, 4) and (4, 5)
+        npc_row, npc_col = 4, 4
+        npc = NPC(
+            x=npc_col * TILE_SIZE + TILE_SIZE,  # Center of 2 tiles
+            y=npc_row * TILE_SIZE + TILE_SIZE / 2,
+            sprite_name="robot_priest",
+            base_width=128,
+            base_height=64,
+            npc_id="big_npc",
+            conversation_engine=make_test_conversation(),
+        )
+        dungeon.npcs = [npc]
+        npc.room_id = 0
+
+        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
+
+        # Place hero south of the left tile of the NPC
+        hero_row, hero_col = npc_row + 1, npc_col
+        hero_x, hero_y = tile_center(hero_row, hero_col)
+
+        command = strategy.decide_next_move(hero_x, hero_y, dungeon)
+
+        assert isinstance(command, InteractCommand)
+        assert command.npc is npc

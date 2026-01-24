@@ -69,19 +69,24 @@ class Dungeon:
 
     def get_room_id(self, x: float, y: float) -> int:
         """Returns room_id for a given pixel position."""
-        tile_col = int(x / TILE_SIZE)
-        tile_row = int(y / TILE_SIZE)
+        col = int(x / TILE_SIZE)
+        row = int(y / TILE_SIZE)
+        return self.get_room_id_for_tile(row, col)
 
+
+    def get_room_id_for_tile(self, row: int, col: int) -> int:
+        """Return room id for row, column tile"""
         # Search through rooms to find which one contains this tile
         for room_id, (pos_x, pos_y) in self.room_positions.items():
             template = self.room_templates[room_id]
             if (
-                pos_x <= tile_col < pos_x + template.width
-                and pos_y <= tile_row < pos_y + template.height
+                pos_x <= col < pos_x + template.width
+                and pos_y <= row < pos_y + template.height
             ):
                 return room_id
 
         return 0
+        
 
     # TODO: caller wants a tile position, not a pixel position!
     def find_goal_position(self) -> Optional[Tuple[int, int]]:

@@ -181,7 +181,7 @@ def setup_dungeon(dungeon: Dungeon) -> None:
     print(f"Placed NPC at tile ({npc_row}, {npc_col})", file=sys.stderr)
 
     # Create hero with strategy that targets the NPC first
-    strategy = NPCThenGoalStrategy(npc=npc)
+    strategy = GoalSeekingStrategy()
     hero = Hero(start_x, start_y, strategy=strategy)
     dungeon.add_hero(hero)
     print(f"Placed hero at ({start_x}, {start_y})", file=sys.stderr)
