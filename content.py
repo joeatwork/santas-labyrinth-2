@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import random
 from abc import ABC, abstractmethod
-from typing import Tuple, List, Optional, Any
+from typing import Tuple, List, Optional, Any, Callable
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
 from dungeon.animation import (
@@ -18,6 +18,11 @@ from dungeon.animation import (
 )
 from dungeon.world import Dungeon, Hero
 from dungeon.conversation_overlay import ConversationOverlay
+
+
+# A DungeonGenerator is a callable that produces a new Dungeon each time it's called.
+# This allows DungeonWalk to generate a fresh dungeon on each enter().
+DungeonGenerator = Callable[[], Dungeon]
 
 
 class Content(ABC):
@@ -320,13 +325,13 @@ class CrashOverlay:
 class DungeonWalk(Content):
     def __init__(
         self,
-        num_rooms: int, # TODO: num_rooms is unused
+        dungeon_generator: DungeonGenerator,
         assets: AssetManager,
         goal_movie: Optional[Content] = None,
         ambient_audio: Optional[AudioClip] = None,
         mix_distance: float = 1024.0,
     ):
-        self.num_rooms = num_rooms
+        self.dungeon_generator = dungeon_generator
         self.assets = assets
         self.dungeon: Optional[Dungeon] = None
         self.hero: Optional[Hero] = None
@@ -353,11 +358,9 @@ class DungeonWalk(Content):
         self.conversation_overlay: Optional[ConversationOverlay] = None
 
     def enter(self) -> None:
-        # Only generate a new dungeon if one doesn't exist
-        # This allows pre-configuring the dungeon with NPCs and custom hero
-        if self.dungeon is None:
-            print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
-            self.dungeon = Dungeon(self.num_rooms)
+        # Generate a new dungeon each time we enter
+        print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
+        self.dungeon = self.dungeon_generator()
 
         # Use hero from dungeon if set via add_hero(), otherwise create default
         if self.dungeon.hero is not None:

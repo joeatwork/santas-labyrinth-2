@@ -7,6 +7,7 @@ from typing import Optional
 from .conversation import ConversationPage, ScriptedConversation
 from .npc import NPC, TILE_SIZE
 from .strategy import NPCSeekingStrategy
+from .dungeon_gen import create_random_dungeon
 from .world import Dungeon, Hero
 
 
@@ -28,24 +29,26 @@ def create_robot_priest(
     x = tile_col * TILE_SIZE + TILE_SIZE  # Center of 2 tiles = left_edge + 64
     y = tile_row * TILE_SIZE + TILE_SIZE / 2  # Center of 1 tile
 
-    conversation = ScriptedConversation([
-        ConversationPage(
-            text=" ".join([
-                "Greetings, traveler! I bless you on your quest!"
-            ]),
-            speaker="Robot Priest",
-            duration=4.0,
-        ),
-        ConversationPage(
-            text=" ".join([
-                "We're still in an alpha release, so we'd appreciate it",
-                "if you'd report any bugs you find. Please tell Buck",
-                "Rogers hello if you happen to see him."
-            ]),
-            speaker="Robot Priest",
-            duration=4.0,
-        ),
-    ])
+    conversation = ScriptedConversation(
+        [
+            ConversationPage(
+                text=" ".join(["Greetings, traveler! I bless you on your quest!"]),
+                speaker="Robot Priest",
+                duration=4.0,
+            ),
+            ConversationPage(
+                text=" ".join(
+                    [
+                        "We're still in an alpha release, so we'd appreciate it",
+                        "if you'd report any bugs you find. Please tell Buck",
+                        "Rogers hello if you happen to see him.",
+                    ]
+                ),
+                speaker="Robot Priest",
+                duration=4.0,
+            ),
+        ]
+    )
 
     return NPC(
         x=x,
@@ -100,7 +103,7 @@ def find_floor_tile_in_room(
     # Score tiles by distance from doors
     def score_tile(tile: tuple[int, int]) -> int:
         col, row = tile
-        min_dist = float('inf')
+        min_dist = float("inf")
         for door_row, door_col in doors:
             dist = abs(col - door_col) + abs(row - door_row)
             min_dist = min(min_dist, dist)
@@ -112,14 +115,18 @@ def find_floor_tile_in_room(
     # Return the best tile that has room for a 2-tile-wide NPC
     for col, row in floor_tiles:
         # Check that both tiles of the 2-wide base are floor
-        if dungeon.is_tile_walkable(row, col) and dungeon.is_tile_walkable(row, col + 1):
+        if dungeon.is_tile_walkable(row, col) and dungeon.is_tile_walkable(
+            row, col + 1
+        ):
             # Check there's at least one adjacent walkable tile (for hero approach)
-            if (dungeon.is_tile_walkable(row + 1, col) or
-                dungeon.is_tile_walkable(row + 1, col + 1) or
-                dungeon.is_tile_walkable(row - 1, col) or
-                dungeon.is_tile_walkable(row - 1, col + 1) or
-                dungeon.is_tile_walkable(row, col - 1) or
-                dungeon.is_tile_walkable(row, col + 2)):
+            if (
+                dungeon.is_tile_walkable(row + 1, col)
+                or dungeon.is_tile_walkable(row + 1, col + 1)
+                or dungeon.is_tile_walkable(row - 1, col)
+                or dungeon.is_tile_walkable(row - 1, col + 1)
+                or dungeon.is_tile_walkable(row, col - 1)
+                or dungeon.is_tile_walkable(row, col + 2)
+            ):
                 return (col, row)
 
     return None
@@ -132,7 +139,7 @@ def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC]:
     Returns:
         Tuple of (dungeon, priest_npc)
     """
-    dungeon = Dungeon(num_rooms)
+    dungeon = create_random_dungeon(num_rooms)
 
     # Find a suitable position in room 1 (second room)
     priest_pos = find_floor_tile_in_room(dungeon, room_id=1)

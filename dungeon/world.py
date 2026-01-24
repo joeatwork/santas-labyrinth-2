@@ -1,5 +1,5 @@
 import math
-from .dungeon_gen import generate_dungeon, Tile, DungeonMap, RoomTemplate
+from .dungeon_gen import Tile, DungeonMap, RoomTemplate
 from .strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
 from .npc import NPC
 from typing import Tuple, List, Optional, Callable, Dict
@@ -8,17 +8,19 @@ TILE_SIZE: int = 64
 
 
 class Dungeon:
-    def __init__(self, num_rooms: int) -> None:
-        self.map: DungeonMap
-        self.start_pos: Tuple[int, int]
+    def __init__(
+        self,
+        dungeon_map: DungeonMap,
+        start_pos: Tuple[int, int],
+        room_positions: Dict[int, Tuple[int, int]],
+        room_templates: Dict[int, RoomTemplate],
+    ) -> None:
+        self.map: DungeonMap = dungeon_map
+        self.start_pos: Tuple[int, int] = start_pos
 
         # Room layout information
-        self.room_positions: Dict[int, Tuple[int, int]]
-        self.room_templates: Dict[int, RoomTemplate]
-
-        self.map, self.start_pos, self.room_positions, self.room_templates = (
-            generate_dungeon(num_rooms)
-        )
+        self.room_positions: Dict[int, Tuple[int, int]] = room_positions
+        self.room_templates: Dict[int, RoomTemplate] = room_templates
 
         self.rows: int
         self.cols: int

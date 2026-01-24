@@ -6,6 +6,7 @@ from dungeon.npc import NPC, TILE_SIZE
 from dungeon.strategy import NPCSeekingStrategy, MoveCommand, InteractCommand
 from dungeon.conversation import ConversationPage, ScriptedConversation
 from dungeon.world import Dungeon
+from dungeon.dungeon_gen import create_random_dungeon
 
 
 def make_test_conversation():
@@ -20,7 +21,7 @@ class TestNPCSeekingStrategy:
 
     def test_returns_interact_when_adjacent_to_npc(self):
         """Strategy returns InteractCommand when hero is adjacent to NPC."""
-        dungeon = Dungeon(num_rooms=2)
+        dungeon = create_random_dungeon(num_rooms=2)
 
         # Place NPC in room 1
         npc_col, npc_row = 5, 5
@@ -49,7 +50,7 @@ class TestNPCSeekingStrategy:
 
     def test_returns_move_when_not_adjacent(self):
         """Strategy returns MoveCommand when hero is not adjacent to NPC."""
-        dungeon = Dungeon(num_rooms=5)
+        dungeon = create_random_dungeon(num_rooms=5)
 
         # Place NPC somewhere in the dungeon
         # Find a suitable floor tile first
@@ -94,7 +95,7 @@ class TestNPCSeekingStrategy:
 
     def test_delegates_to_goal_after_interaction(self):
         """After interacting, strategy delegates to GoalSeekingStrategy."""
-        dungeon = Dungeon(num_rooms=2)
+        dungeon = create_random_dungeon(num_rooms=2)
 
         npc = NPC(
             x=100.0,
@@ -117,7 +118,7 @@ class TestNPCSeekingStrategy:
 
     def test_adjacent_to_multi_tile_npc(self):
         """Strategy can interact with multi-tile NPCs from any adjacent tile."""
-        dungeon = Dungeon(num_rooms=5)
+        dungeon = create_random_dungeon(num_rooms=5)
 
         # Find a good position for a 2-tile-wide NPC
         from dungeon.dungeon_gen import Tile

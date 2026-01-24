@@ -830,3 +830,19 @@ def generate_dungeon(num_rooms: int) -> Tuple[
         room_positions_final[room_id] = (pos.column, pos.row)
 
     return dungeon_map, start_pos_pixel, room_positions_final, room_assignments
+
+
+def create_random_dungeon(num_rooms: int) -> "Dungeon":
+    """
+    Factory function to create a randomly generated dungeon.
+
+    Parameters:
+        num_rooms: Target number of rooms to generate
+
+    Returns:
+        A Dungeon instance with the generated map and layout
+    """
+    from .world import Dungeon
+
+    dungeon_map, start_pos, room_positions, room_templates = generate_dungeon(num_rooms)
+    return Dungeon(dungeon_map, start_pos, room_positions, room_templates)

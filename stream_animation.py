@@ -81,14 +81,14 @@ def main():
     dungeon_audio_file = os.path.join("assets", "dungeon_audio", "drones.mp3")
     dungeon_audio = AudioClip(dungeon_audio_file, 0.2)
 
-    # Create dungeon with robot priest NPC
-    dungeon, priest = create_dungeon_with_priest(args.num_rooms)
-    hero = create_hero_with_priest_strategy(dungeon, priest)
-    dungeon.add_hero(hero)
+    # Create a dungeon generator that produces a new dungeon with priest NPC each time
+    def make_dungeon_with_priest():
+        dungeon, priest = create_dungeon_with_priest(args.num_rooms)
+        hero = create_hero_with_priest_strategy(dungeon, priest)
+        dungeon.add_hero(hero)
+        return dungeon
 
-    # Create DungeonWalk with pre-configured dungeon
-    dungeon_walk = DungeonWalk(args.num_rooms, assets, random_video, dungeon_audio)
-    dungeon_walk.dungeon = dungeon
+    dungeon_walk = DungeonWalk(make_dungeon_with_priest, assets, random_video, dungeon_audio)
 
     video_program.add_content(random_title_card, 30.0)
     video_program.add_content(dungeon_walk, 120.0)
