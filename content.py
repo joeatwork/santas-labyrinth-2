@@ -1,11 +1,14 @@
 import av
+from av.audio.stream import AudioStream
+from av.video.stream import VideoStream
 import cv2
 import sys
 import numpy as np
 import random
 from abc import ABC, abstractmethod
-from typing import Tuple, List, Optional, Any, Callable
+from typing import Tuple, List, Optional, Any, Callable, Union, cast
 from PIL import Image as PILImage, ImageDraw, ImageFont
+from PIL.ImageFont import FreeTypeFont, ImageFont as PILImageFont
 
 from dungeon.animation import (
     AssetManager,
@@ -112,7 +115,7 @@ class AudioClip:
 
         # Audio state
         self.container: Optional[av.container.InputContainer] = None
-        self.audio_stream: Optional[av.stream.Stream] = None
+        self.audio_stream: Optional[AudioStream] = None
         self.audio_resampler: Optional[av.audio.resampler.AudioResampler] = None
         self.audio_buffer: np.ndarray = np.zeros((0, 2), dtype=np.int16)
         self.finished: bool = False
@@ -137,7 +140,7 @@ class AudioClip:
 
         audio_streams = [s for s in self.container.streams if s.type == "audio"]
         if audio_streams:
-            self.audio_stream = audio_streams[0]
+            self.audio_stream = cast(AudioStream, audio_streams[0])
             self.audio_resampler = av.audio.resampler.AudioResampler(
                 format="s16p",
                 layout="stereo",
@@ -166,13 +169,15 @@ class AudioClip:
         try:
             for packet in self.container.demux(self.audio_stream):
                 for frame in packet.decode():
-                    resampled = self.audio_resampler.resample(frame)
+                    # PyAV type stubs incorrectly type packet.decode() as returning SubtitleSet
+                    resampled = self.audio_resampler.resample(cast(Any, frame))
                     if resampled:
                         for rf in resampled:
                             arr = rf.to_ndarray()
                             arr = arr.T  # (channels, samples) -> (samples, channels)
                             self.audio_buffer = np.vstack([self.audio_buffer, arr])
                 return True  # Got some audio
+            return False  # No packets available
         except av.error.EOFError:
             # Flush the resampler
             try:
@@ -303,6 +308,7 @@ class CrashOverlay:
         )
 
         # Load a font (use default if no specific font available)
+        font: Union[FreeTypeFont, PILImageFont]
         try:
             font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
         except (IOError, OSError):
@@ -387,6 +393,7 @@ class DungeonWalk(Content):
 
     def update(self, dt: float) -> None:
         assert self.dungeon is not None
+        assert self.hero is not None
 
         if self.ambient_audio is not None and self.ambient_audio.is_complete():
             self.ambient_audio.enter()
@@ -555,8 +562,8 @@ class VideoClip(Content):
     ):
         self.media_path = media_path
         self.container: Optional[av.container.InputContainer] = None
-        self.video_stream: Optional[av.stream.Stream] = None
-        self.audio_stream: Optional[av.stream.Stream] = None
+        self.video_stream: Optional[VideoStream] = None
+        self.audio_stream: Optional[AudioStream] = None
         self.source_fps: float = 30.0  # Will be read from file
         self.output_fps: float = output_fps
         self.audio_sample_rate: int = 44100
@@ -588,7 +595,7 @@ class VideoClip(Content):
         # Get video stream and read source fps
         video_streams = [s for s in self.container.streams if s.type == "video"]
         if video_streams:
-            self.video_stream = video_streams[0]
+            self.video_stream = cast(VideoStream, video_streams[0])
             self.source_fps = (
                 float(self.video_stream.average_rate)
                 if self.video_stream.average_rate
@@ -605,7 +612,7 @@ class VideoClip(Content):
         # Get audio stream
         audio_streams = [s for s in self.container.streams if s.type == "audio"]
         if audio_streams:
-            self.audio_stream = audio_streams[0]
+            self.audio_stream = cast(AudioStream, audio_streams[0])
             # Create resampler to convert to our output format (44100Hz stereo s16 planar)
             # Using s16p (planar) gives consistent (channels, samples) shape from to_ndarray()
             self.audio_resampler = av.audio.resampler.AudioResampler(
@@ -660,14 +667,16 @@ class VideoClip(Content):
                 if packet.stream == self.video_stream:
                     for frame in packet.decode():
                         # Convert to BGR for OpenCV compatibility
-                        img = frame.to_ndarray(format="bgr24")
+                        # PyAV type stubs incorrectly type packet.decode() as returning SubtitleSet
+                        img = cast(Any, frame).to_ndarray(format="bgr24")
                         self.current_frame = img
                         return  # Got a video frame, stop
 
                 elif packet.stream == self.audio_stream and self.audio_resampler:
                     for frame in packet.decode():
                         # Resample to target format (s16p stereo)
-                        resampled = self.audio_resampler.resample(frame)
+                        # PyAV type stubs incorrectly type packet.decode() as returning SubtitleSet
+                        resampled = self.audio_resampler.resample(cast(Any, frame))
                         if resampled:
                             for rf in resampled:
                                 # With s16p format, to_ndarray() returns (channels, samples) as int16

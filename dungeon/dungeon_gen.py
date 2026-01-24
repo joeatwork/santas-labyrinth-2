@@ -20,7 +20,10 @@ import random
 import numpy as np
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple, List, Dict, Set, Optional
+from typing import Tuple, List, Dict, Set, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .world import Dungeon
 
 
 # Tile Constants (Matching animation.py expectations or defining new ones)

@@ -2,7 +2,7 @@ import math
 from .dungeon_gen import Tile, DungeonMap, RoomTemplate
 from .strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
 from .npc import NPC
-from typing import Tuple, List, Optional, Callable, Dict
+from typing import Tuple, List, Optional, Callable, Dict, Any
 
 TILE_SIZE: int = 64
 
@@ -230,7 +230,7 @@ class Hero:
         x: float,
         y: float,
         strategy: Optional[Strategy] = None,
-        random_choice: Optional[Callable[[List], any]] = None,
+        random_choice: Optional[Callable[[List], Any]] = None,
     ) -> None:
         # Pixel coordinates
         self.x: float = float(x)

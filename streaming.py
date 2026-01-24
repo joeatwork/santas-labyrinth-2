@@ -1,8 +1,10 @@
 import av
+from av.video.stream import VideoStream
+from av.audio.stream import AudioStream
 import subprocess
 import sys
 import numpy as np
-from typing import Optional, IO, Union
+from typing import Optional, IO, Union, cast
 
 
 class FFmpegStreamer:
@@ -31,8 +33,8 @@ class FFmpegStreamer:
 
         self.ffmpeg_process: Optional[subprocess.Popen] = None
         self.container: Optional[av.container.OutputContainer] = None
-        self.video_stream: Optional[av.stream.Stream] = None
-        self.audio_stream: Optional[av.stream.Stream] = None
+        self.video_stream: Optional[VideoStream] = None
+        self.audio_stream: Optional[AudioStream] = None
 
         self.frame_count = 0
         self.audio_sample_count = 0
@@ -110,13 +112,13 @@ class FFmpegStreamer:
         )
 
         # Add video stream (raw RGB, will be encoded by ffmpeg)
-        self.video_stream = self.container.add_stream('rawvideo', rate=self.fps)
+        self.video_stream = cast(VideoStream, self.container.add_stream('rawvideo', rate=self.fps))
         self.video_stream.width = self.width
         self.video_stream.height = self.height
         self.video_stream.pix_fmt = 'rgb24'
 
         # Add audio stream (raw PCM, will be encoded by ffmpeg)
-        self.audio_stream = self.container.add_stream('pcm_s16le', rate=self.audio_sample_rate)
+        self.audio_stream = cast(AudioStream, self.container.add_stream('pcm_s16le', rate=self.audio_sample_rate))
         self.audio_stream.layout = 'stereo' if self.audio_channels == 2 else 'mono'
 
         self.frame_count = 0
@@ -234,7 +236,8 @@ class FFmpegStreamer:
 
         if self.ffmpeg_process:
             try:
-                self.ffmpeg_process.stdin.close()
+                if self.ffmpeg_process.stdin:
+                    self.ffmpeg_process.stdin.close()
                 self.ffmpeg_process.wait(timeout=10)
             except Exception as e:
                 print(f"Error closing ffmpeg: {e}", file=sys.stderr)

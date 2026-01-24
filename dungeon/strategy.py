@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass
 import sys
-from typing import Tuple, List, Optional, Callable, Set, Union, TYPE_CHECKING
+from typing import Tuple, List, Optional, Callable, Set, Union, TYPE_CHECKING, Any
 import numpy as np
 
 from .dungeon_gen import Tile
@@ -109,7 +109,7 @@ class GoalSeekingStrategy(Strategy):
         self._path_target: Optional[Tuple[int, int]] = None
 
         # Dependency injection for random selection (for testing)
-        self._random_choice: Callable[[List], any] = random_choice or (
+        self._random_choice: Callable[[List], Any] = random_choice or (
             lambda lst: lst[np.random.randint(0, len(lst))]
         )
 
@@ -179,7 +179,7 @@ class GoalSeekingStrategy(Strategy):
                 return
 
         # Otherwise, pick a door
-        chosen_door = None
+        chosen_door: Optional[Tuple[int, int]] = None
 
         doors = dungeon.find_doors_in_room(current_room)
         keys_and_doors = [
@@ -305,6 +305,11 @@ class GoalSeekingStrategy(Strategy):
         )
 
         if should_recompute_path:
+            # Type narrowing: ensure goal is set
+            if self.next_goal_row is None or self.next_goal_col is None:
+                # No valid target, stay idle
+                return MoveCommand(target_x=x, target_y=y, direction=0)
+
             new_path = find_path_bfs(
                 hero_row,
                 hero_col,
