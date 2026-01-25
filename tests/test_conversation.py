@@ -25,16 +25,16 @@ class TestConversationPage:
         assert page.duration == 2.5
 
     def test_page_optional_portrait(self):
-        """ConversationPage has optional portrait_path."""
+        """ConversationPage has optional portrait_sprite."""
         page = ConversationPage(text="Hello!", speaker="npc")
-        assert page.portrait_path is None
+        assert page.portrait_sprite is None
 
         page_with_portrait = ConversationPage(
             text="Hello!",
             speaker="npc",
-            portrait_path="assets/portraits/wizard.png"
+            portrait_sprite="wizard_portrait"
         )
-        assert page_with_portrait.portrait_path == "assets/portraits/wizard.png"
+        assert page_with_portrait.portrait_sprite == "wizard_portrait"
 
 
 class TestScriptedConversation:

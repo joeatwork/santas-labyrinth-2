@@ -41,7 +41,8 @@ def create_robot_priest(
                     ]
                 ),
                 speaker="Placeholder Robot Priest",
-                duration=3.0,
+                portrait_sprite="robot_priest_portrait",
+                duration=4.0,
             ),
             ConversationPage(
                 text=" ".join(
@@ -51,7 +52,8 @@ def create_robot_priest(
                     ]
                 ),
                 speaker="Placeholder Robot Priest",
-                duration=3.0,
+                portrait_sprite="robot_priest_portrait",
+                duration=4.0,
             ),
             ConversationPage(
                 text=" ".join(
@@ -61,7 +63,8 @@ def create_robot_priest(
                     ]
                 ),
                 speaker="Placeholder Robot Priest",
-                duration=3.0,
+                portrait_sprite="robot_priest_portrait",
+                duration=4.0,
             ),
         ]
     )
@@ -78,7 +81,6 @@ def create_robot_priest(
 def find_floor_tile_in_room(
     dungeon: Dungeon,
     room_id: int,
-    min_distance_from_door: int = 2,
 ) -> Optional[tuple[int, int]]:
     """
     Find a floor tile in the given room suitable for placing an NPC.

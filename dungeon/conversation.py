@@ -16,7 +16,7 @@ class ConversationPage:
 
     text: str
     speaker: str  # "npc" or "hero"
-    portrait_path: Optional[str] = None
+    portrait_sprite: Optional[str] = None  # Sprite name for AssetManager
     duration: float = 4.0  # Seconds to display this page
 
 

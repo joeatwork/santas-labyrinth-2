@@ -3,11 +3,31 @@ import os
 import sys
 import numpy as np
 from PIL import ImageFont
+from dataclasses import dataclass
 from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
-from typing import Dict, Any, List, Optional, Tuple, Protocol, TYPE_CHECKING
+from typing import (
+    Dict,
+    Any,
+    List,
+    Optional,
+    Tuple,
+    Protocol,
+    TYPE_CHECKING,
+    Union,
+    cast,
+)
 
 if TYPE_CHECKING:
     from dungeon.npc import NPC
+
+
+@dataclass
+class RenderableEntity:
+    """An entity that can be rendered, with a sort key for y-ordering."""
+
+    entity: Union["NPC", "HeroLike"]
+    sort_y: float  # Bottom of the base (maximum y dimension)
+    is_hero: bool
 
 
 # TODO: this module should probably be named something like dungeon_renderer rather
@@ -392,7 +412,14 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
         "file": "sprites/spaceman_overworld_64x64.png",
     },
     # OLD Robot priest (large NPC: 128x192, logical base is bottom 128x64 = 2 tiles)
-    "robot_priest": {"x": 0, "y": 0, "w": 128, "h": 192, "file": "sprites/npcs_01.png"},
+    "robot_priest": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 192,
+        "file": "sprites/npcs_01.png",
+        "base_width": 128,
+    },
     # NEW Robot priest (large NPC with weird dimensions, with a weird negative offset)
     "indora_god": {
         "x": 128,
@@ -400,7 +427,17 @@ SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
         "w": 154,
         "h": 282,
         "file": "sprites/npcs_01.png",
+        "base_width": 128,
         "offset_x": -10,
+        "offset_y": -32,
+    },
+    # Portraits for conversation overlay
+    "robot_priest_portrait": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256,
+        "file": "portraits/npc_portraits_01.png",
     },
 }
 
@@ -465,12 +502,17 @@ class AssetManager:
     def __init__(self) -> None:
         self.images: Dict[str, Image] = {}
         self.sprites: Dict[str, Image] = {}
+        self.font_sizes: Dict[str, int] = {}
         self.fonts: Dict[str, ImageFont.FreeTypeFont] = {}
 
     def load_fonts(self) -> None:
         path = os.path.join("assets", "fonts", "ChicagoFLF.ttf")
-        self.fonts["regular"] = ImageFont.truetype(path, 20)
-        self.fonts["small"] = ImageFont.truetype(path, 14)
+        self.font_sizes = {
+            "regular": 32,
+            "small": 16
+        }
+        self.fonts["regular"] = ImageFont.truetype(path, self.font_sizes["regular"])
+        self.fonts["small"] = ImageFont.truetype(path, self.font_sizes["small"])
 
     def load_images(self) -> None:
         unique_files = set(cfg["file"] for cfg in SPRITE_OFFSETS.values())
@@ -643,27 +685,44 @@ def render_frame_camera(
     # TODO: this is a hack, the Goal should just be another NPC!
     if goal_position:
         goal_sprite = assets.get_sprite("goal")
-        print(f"rendering goal sprite at {goal_position}", file=sys.stderr)
         goal_screen_x = goal_position[0] - cam_x
         goal_screen_y = goal_position[1] - cam_y
         overlay_image(frame, goal_sprite, goal_screen_x, goal_screen_y)
 
-    # Draw Hero relative to camera
-    hero_screen_x = int(hero.x - cam_x - TILE_SIZE / 2)
-    hero_screen_y = int(hero.y - cam_y - TILE_SIZE / 2)
+    # Build list of renderable entities (hero + NPCs) sorted by base bottom y
+    # Entities with lower y (higher on screen) render first
+    entities: List[RenderableEntity] = []
 
-    # Determine sprite based on direction and animation frame
-    # Lookup sprite name from static table
-    sprite_name = HERO_WALK_CYCLES[hero.direction][hero.walk_frame]
-    hero_sprite = assets.get_sprite(sprite_name)
-    overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
+    # Add hero - base bottom is y + TILE_SIZE/2
+    hero_base_bottom = hero.y + TILE_SIZE / 2
+    entities.append(
+        RenderableEntity(entity=hero, sort_y=hero_base_bottom, is_hero=True)
+    )
 
-    # TODO: npc sprites should be interleaved with the hero and the goal
-    # sorted by Y coordinates, and rendered lowest Y first.
-    # We can also crop and shift the NPCs inline rather than call a
-    # separate render_npc function.
-    for friend in npcs:
-        render_npc(frame, friend, assets, cam_x, cam_y)
+    # Add NPCs - base bottom is y + base_height/2
+    for npc in npcs:
+        npc_base_bottom = npc.y + npc.base_height / 2
+        entities.append(
+            RenderableEntity(entity=npc, sort_y=npc_base_bottom, is_hero=False)
+        )
+
+    # Sort by sort_y (lowest y first = higher on screen renders first)
+    entities.sort(key=lambda e: e.sort_y)
+
+    # Render entities in sorted order
+    for renderable in entities:
+        if renderable.is_hero:
+            # Draw Hero relative to camera
+            hero_screen_x = int(hero.x - cam_x - TILE_SIZE / 2)
+            hero_screen_y = int(hero.y - cam_y - TILE_SIZE / 2)
+
+            # Determine sprite based on direction and animation frame
+            sprite_name = HERO_WALK_CYCLES[hero.direction][hero.walk_frame]
+            hero_sprite = assets.get_sprite(sprite_name)
+            overlay_image(frame, hero_sprite, hero_screen_x, hero_screen_y)
+        else:
+            # Type is guaranteed to be NPC when is_hero=False
+            render_npc(frame, cast("NPC", renderable.entity), assets, cam_x, cam_y)
 
     # Draw foreground layer (doorframe arches) on top of hero
     if fg_image is not None:
@@ -673,6 +732,7 @@ def render_frame_camera(
             overlay_image(frame, fg_crop, 0, 0)
 
     return frame
+
 
 # TODO: inline this into render_frame_camera
 def render_npc(

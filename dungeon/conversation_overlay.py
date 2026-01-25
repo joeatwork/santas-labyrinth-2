@@ -6,7 +6,7 @@ Renders conversation pages with optional portraits, advancing via ConversationEn
 
 import cv2
 import numpy as np
-from typing import Optional, List, Dict
+from typing import Optional, List
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
 from dungeon.animation import AssetManager
@@ -32,7 +32,6 @@ class ConversationOverlay:
         self.assets = assets
         self.current_page: Optional[ConversationPage] = None
         self.page_elapsed: float = 0.0
-        self._portrait_cache: Dict[str, Image] = {}
 
     def enter(self) -> None:
         """Start the conversation."""
@@ -52,16 +51,6 @@ class ConversationOverlay:
     def is_complete(self) -> bool:
         """Returns True when all pages have been shown."""
         return self.current_page is None
-
-    def _load_portrait(self, path: str) -> Optional[Image]:
-        """Load and cache portrait image."""
-        if path in self._portrait_cache:
-            return self._portrait_cache[path]
-
-        portrait = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        if portrait is not None:
-            self._portrait_cache[path] = portrait
-        return portrait
 
     def _wrap_text(
         self, text: str, draw: ImageDraw.ImageDraw, font: ImageFont.FreeTypeFont, max_width: int
@@ -113,8 +102,8 @@ class ConversationOverlay:
         text_x_offset = 20
         portrait_size = box_height - 20
 
-        if self.current_page.portrait_path:
-            portrait = self._load_portrait(self.current_page.portrait_path)
+        if self.current_page.portrait_sprite:
+            portrait = self.assets.get_sprite(self.current_page.portrait_sprite)
             if portrait is not None:
                 # Resize portrait to fit
                 portrait_resized = cv2.resize(portrait, (portrait_size, portrait_size))
@@ -150,7 +139,7 @@ class ConversationOverlay:
         lines = self._wrap_text(self.current_page.text, draw, self.assets.fonts['regular'], max_text_width)
 
         # Draw each line
-        line_height = 28
+        line_height = int(self.assets.font_sizes['regular'] * 1.5)
         for i, line in enumerate(lines):
             draw.text((text_x, text_y + i * line_height), line, fill=(35, 35, 35), font=self.assets.fonts['regular'])
 
