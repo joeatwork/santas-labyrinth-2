@@ -695,9 +695,11 @@ def generate_dungeon(
     connected_doors: Set[Tuple[int, Direction]] = set()
 
     # Start with first room at center of canvas
+    # Always use the "large" room template as the first room to ensure
+    # we have at least one room with a 4x4 walkable area for NPC placement
     start_room_id = 0
     start_position = Position(row=canvas_size // 2, column=canvas_size // 2)
-    start_template = random.choice(ROOM_TEMPLATES)
+    start_template = next(t for t in ROOM_TEMPLATES if t.name == "large")
 
     room_positions[start_room_id] = start_position
     room_assignments[start_room_id] = start_template

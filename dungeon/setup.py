@@ -78,6 +78,52 @@ def create_robot_priest(
     )
 
 
+def has_4x4_walkable_area(dungeon: Dungeon, room_id: int) -> bool:
+    """
+    Check if a room has at least a 4x4 contiguous area of walkable tiles.
+
+    Args:
+        dungeon: The dungeon containing the room
+        room_id: The room to check
+
+    Returns:
+        True if room has at least a 4x4 walkable area, False otherwise
+    """
+    from .dungeon_gen import Tile
+
+    if room_id not in dungeon.room_positions:
+        return False
+
+    base_col, base_row = dungeon.room_positions[room_id]
+    template = dungeon.room_templates[room_id]
+
+    # Check if room is even large enough to contain a 4x4 area
+    if template.width < 4 or template.height < 4:
+        return False
+
+    # Scan through room looking for a 4x4 walkable area
+    for start_row in range(template.height - 3):
+        for start_col in range(template.width - 3):
+            # Check if all tiles in this 4x4 area are walkable
+            all_walkable = True
+            for dr in range(4):
+                for dc in range(4):
+                    map_row = base_row + start_row + dr
+                    map_col = base_col + start_col + dc
+                    if not (0 <= map_row < dungeon.rows and 0 <= map_col < dungeon.cols):
+                        all_walkable = False
+                        break
+                    if dungeon.map[map_row, map_col] != Tile.FLOOR:
+                        all_walkable = False
+                        break
+                if not all_walkable:
+                    break
+            if all_walkable:
+                return True
+
+    return False
+
+
 def find_floor_tile_in_room(
     dungeon: Dungeon,
     room_id: int,
@@ -87,8 +133,13 @@ def find_floor_tile_in_room(
 
     Returns (col, row) in tile coordinates, or None if no suitable tile found.
     Tries to find a tile away from doors for better placement.
+    Only considers rooms with at least a 4x4 walkable area.
     """
     from .dungeon_gen import Tile
+
+    # First check if this room has a 4x4 walkable area
+    if not has_4x4_walkable_area(dungeon, room_id):
+        return None
 
     if room_id not in dungeon.room_positions:
         return None
@@ -127,9 +178,13 @@ def find_floor_tile_in_room(
 
     # Return the best tile that has room for a 2-tile-wide NPC
     for col, row in floor_tiles:
-        # Check that both tiles of the 2-wide base are floor
-        if dungeon.is_tile_walkable(row, col) and dungeon.is_tile_walkable(
-            row, col + 1
+        # Check that both tiles of the 2-wide base are floor tiles
+        # We need to check the raw map tiles, not walkability (which includes NPC checks)
+        if (
+            0 <= row < dungeon.rows
+            and 0 <= col + 1 < dungeon.cols
+            and dungeon.map[row, col] == Tile.FLOOR
+            and dungeon.map[row, col + 1] == Tile.FLOOR
         ):
             # Check there's at least one adjacent walkable tile (for hero approach)
             if (
@@ -159,15 +214,19 @@ def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC, Hero]:
     # Generate dungeon without goal - priest will place it after conversation
     dungeon = create_random_dungeon(num_rooms, place_goal=False)
 
-    # Find a suitable position in room 1 (second room)
-    priest_pos = find_floor_tile_in_room(dungeon, room_id=1)
+    # Find a suitable room with at least a 4x4 walkable area
+    # Try rooms in order, preferring later rooms over the starting room
+    priest_pos = None
+    for room_id in sorted(dungeon.room_positions.keys(), reverse=True):
+        priest_pos = find_floor_tile_in_room(dungeon, room_id)
+        if priest_pos is not None:
+            break
 
     if priest_pos is None:
-        # Fallback: try room 0
-        priest_pos = find_floor_tile_in_room(dungeon, room_id=0)
-
-    if priest_pos is None:
-        raise RuntimeError("Could not find suitable position for robot priest")
+        raise RuntimeError(
+            "Could not find suitable position for robot priest. "
+            "No room with 4x4 walkable area found."
+        )
 
     col, row = priest_pos
     priest = create_robot_priest(col, row)

@@ -540,13 +540,12 @@ class TestStrategyNPCSeeking:
         dungeon = MockDungeon(1, 1)
 
         # Create 2-tile-wide NPC at tiles (4, 4) and (4, 5)
+        # robot_priest has base_width=128, base_height=64
         npc_row, npc_col = 4, 4
         npc = NPC(
             x=npc_col * TILE_SIZE + TILE_SIZE,  # Center of 2 tiles
             y=npc_row * TILE_SIZE + TILE_SIZE / 2,
             sprite_name="robot_priest",
-            base_width=128,
-            base_height=64,
             npc_id="big_npc",
             conversation_engine=make_test_conversation(),
         )

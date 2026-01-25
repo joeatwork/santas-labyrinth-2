@@ -97,43 +97,39 @@ class TestMultiTileNPC:
 
     def test_custom_base_size(self):
         """NPC can have different base and sprite sizes."""
-        # robot_priest sprite is 128x192, but we specify a 128x64 base
+        # robot_priest sprite is 128x192 with base_width=128 in SPRITE_OFFSETS
+        # base_height defaults to 64 when not specified
         npc = NPC(
             x=100.0,
             y=100.0,
             sprite_name="robot_priest",
-            base_width=128,
-            base_height=64,
         )
         # Sprite dimensions come from SPRITE_OFFSETS
         assert npc.sprite_width == 128
         assert npc.sprite_height == 192
-        # Base dimensions are explicitly specified
+        # Base dimensions come from SPRITE_OFFSETS (with default base_height=64)
         assert npc.base_width == 128
         assert npc.base_height == 64
 
     def test_base_tile_dimensions(self):
         """NPC calculates base tile dimensions correctly."""
-        # 128x64 base = 2 tiles wide, 1 tile tall
+        # robot_priest has 128x64 base = 2 tiles wide, 1 tile tall
         npc = NPC(
             x=128.0,  # Center of 2-tile-wide base
             y=32.0,   # Center of 1-tile-tall base
             sprite_name="robot_priest",
-            base_width=128,
-            base_height=64,
         )
         assert npc.base_tile_width == 2
         assert npc.base_tile_height == 1
 
     def test_tile_col_for_multi_tile_npc(self):
         """tile_col returns leftmost tile for multi-tile NPC."""
-        # Position center of 2-tile base at x=128 (center of tiles 0 and 1)
+        # Position center of 2-tile base at x=64 (center of tiles 0 and 1)
+        # robot_priest has base_width=128
         npc = NPC(
             x=TILE_SIZE,  # 64 - center of 128-wide base starting at x=0
             y=TILE_SIZE / 2,
             sprite_name="robot_priest",
-            base_width=128,
-            base_height=64,
         )
         assert npc.tile_col == 0  # Leftmost tile
 
@@ -153,14 +149,13 @@ class TestMultiTileNPC:
     def test_occupies_tile_multi_tile(self):
         """Multi-tile NPC occupies all base tiles."""
         # 2-tile-wide NPC at tiles (3, 4) and (3, 5)
+        # robot_priest has base_width=128, base_height=64
         x = 4 * TILE_SIZE + TILE_SIZE  # Center of tiles 4 and 5
         y = 3 * TILE_SIZE + TILE_SIZE / 2  # Center of row 3
         npc = NPC(
             x=x,
             y=y,
             sprite_name="robot_priest",
-            base_width=128,
-            base_height=64,
         )
 
         # Should occupy tiles (3, 4) and (3, 5)
