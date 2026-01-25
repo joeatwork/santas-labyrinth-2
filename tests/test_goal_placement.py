@@ -3,7 +3,7 @@
 import pytest
 import numpy as np
 
-from dungeon.dungeon_gen import Tile, create_random_dungeon
+from dungeon.dungeon_gen import create_random_dungeon
 from dungeon.world import TILE_SIZE
 from dungeon.strategy import GoalSeekingStrategy
 from dungeon.setup import create_dungeon_with_priest
@@ -12,59 +12,64 @@ from dungeon.setup import create_dungeon_with_priest
 class TestDungeonWithoutGoal:
     """Test that dungeons can be generated without a goal."""
 
-    def test_dungeon_without_goal_has_no_goal_tile(self):
-        """A dungeon generated with place_goal=False should have no goal tile."""
+    def test_dungeon_without_goal_has_no_goal_npc(self):
+        """A dungeon generated with place_goal=False should have no goal NPC."""
         dungeon = create_random_dungeon(5, place_goal=False)
 
-        # Scan entire map for goal tile
-        goal_count = np.sum(dungeon.map == Tile.GOAL)
-        assert goal_count == 0, "Dungeon should have no goal tile"
+        goal_npc = dungeon.find_goal_npc()
+        assert goal_npc is None, "Dungeon should have no goal NPC"
 
-    def test_dungeon_with_goal_has_goal_tile(self):
-        """A dungeon generated with place_goal=True should have a goal tile."""
+    def test_dungeon_with_goal_has_goal_npc(self):
+        """A dungeon generated with place_goal=True should have a goal NPC."""
         dungeon = create_random_dungeon(5, place_goal=True)
 
-        goal_count = np.sum(dungeon.map == Tile.GOAL)
-        assert goal_count == 1, "Dungeon should have exactly one goal tile"
+        goal_npc = dungeon.find_goal_npc()
+        assert goal_npc is not None, "Dungeon should have a goal NPC"
+        assert goal_npc.is_goal is True
 
     def test_default_is_to_place_goal(self):
         """By default, dungeons should have a goal."""
         dungeon = create_random_dungeon(5)
 
-        goal_count = np.sum(dungeon.map == Tile.GOAL)
-        assert goal_count == 1, "Default should place a goal"
+        goal_npc = dungeon.find_goal_npc()
+        assert goal_npc is not None, "Default should place a goal"
 
 
 class TestPlaceGoal:
     """Test Dungeon.place_goal() method."""
 
-    def test_place_goal_adds_goal_tile(self):
-        """place_goal should add a goal tile to the dungeon."""
+    def test_place_goal_adds_goal_npc(self):
+        """place_goal should add a goal NPC to the dungeon."""
         dungeon = create_random_dungeon(5, place_goal=False)
 
         # Verify no goal initially
-        assert np.sum(dungeon.map == Tile.GOAL) == 0
+        assert dungeon.find_goal_npc() is None
 
         # Place goal in room 2
         col, row = dungeon.place_goal(room_id=2)
 
         # Verify goal was placed
-        assert dungeon.map[row, col] == Tile.GOAL
-        assert np.sum(dungeon.map == Tile.GOAL) == 1
+        goal_npc = dungeon.find_goal_npc()
+        assert goal_npc is not None
+        assert goal_npc.is_goal is True
+        # Verify goal NPC is at the returned position
+        assert goal_npc.tile_col == col
+        assert goal_npc.tile_row == row
 
     def test_place_goal_replaces_existing_goal(self):
         """place_goal should remove any existing goal first."""
         dungeon = create_random_dungeon(5, place_goal=True)
 
         # Find original goal position
-        original_goal_pos = dungeon.find_goal_position()
-        assert original_goal_pos is not None
+        original_goal_npc = dungeon.find_goal_npc()
+        assert original_goal_npc is not None
 
         # Place goal in a different room
         dungeon.place_goal(room_id=1)
 
-        # Should still have exactly one goal
-        assert np.sum(dungeon.map == Tile.GOAL) == 1
+        # Should still have exactly one goal NPC
+        goal_npcs = [npc for npc in dungeon.npcs if npc.is_goal]
+        assert len(goal_npcs) == 1, "Should have exactly one goal NPC"
 
     def test_place_goal_in_invalid_room_raises(self):
         """place_goal with invalid room_id should raise RuntimeError."""
@@ -72,6 +77,33 @@ class TestPlaceGoal:
 
         with pytest.raises(RuntimeError, match="does not exist"):
             dungeon.place_goal(room_id=999)
+
+
+class TestRemoveGoal:
+    """Test Dungeon.remove_goal() method."""
+
+    def test_remove_goal_removes_goal_npc(self):
+        """remove_goal should remove the goal NPC from the dungeon."""
+        dungeon = create_random_dungeon(5, place_goal=True)
+
+        # Verify goal exists
+        assert dungeon.find_goal_npc() is not None
+
+        # Remove goal
+        dungeon.remove_goal()
+
+        # Verify goal is gone
+        assert dungeon.find_goal_npc() is None
+
+    def test_remove_goal_on_dungeon_without_goal(self):
+        """remove_goal should be safe to call when no goal exists."""
+        dungeon = create_random_dungeon(5, place_goal=False)
+
+        # Should not raise
+        dungeon.remove_goal()
+
+        # Still no goal
+        assert dungeon.find_goal_npc() is None
 
 
 class TestStrategyReset:
@@ -125,8 +157,8 @@ class TestCreateDungeonWithPriest:
         """Dungeon should not have a goal initially."""
         dungeon, priest, hero = create_dungeon_with_priest(5)
 
-        goal_count = np.sum(dungeon.map == Tile.GOAL)
-        assert goal_count == 0, "Dungeon should start without goal"
+        goal_npc = dungeon.find_goal_npc()
+        assert goal_npc is None, "Dungeon should start without goal"
 
     def test_priest_has_conversation_complete_callback(self):
         """Priest should have on_conversation_complete callback set."""
@@ -139,13 +171,15 @@ class TestCreateDungeonWithPriest:
         dungeon, priest, hero = create_dungeon_with_priest(5)
 
         # No goal initially
-        assert np.sum(dungeon.map == Tile.GOAL) == 0
+        assert dungeon.find_goal_npc() is None
 
         # Trigger the callback
         priest.on_conversation_complete()
 
         # Now there should be a goal
-        assert np.sum(dungeon.map == Tile.GOAL) == 1
+        goal_npc = dungeon.find_goal_npc()
+        assert goal_npc is not None
+        assert goal_npc.is_goal is True
 
     def test_callback_resets_hero_strategy(self):
         """Calling the callback should reset the hero's strategy state."""

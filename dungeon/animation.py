@@ -477,8 +477,6 @@ TILE_MAP: Dict[int, Optional[str]] = {
     Tile.WEST_DOOR_SOUTH: "west_door_floor",
     Tile.EAST_DOOR_NORTH: "east_door_floor",
     Tile.EAST_DOOR_SOUTH: "east_door_floor",
-    # TODO GOAL should not be a tile, it should be an NPC
-    Tile.GOAL: "floor",
     Tile.NOTHING: None,
 }
 
@@ -652,8 +650,6 @@ def render_frame_camera(
     assets: AssetManager,
     hero: HeroLike,
     npcs: List["NPC"],
-    # goal_position is a pixel position x, y
-    goal_position: Optional[Tuple[int, int]],
     view_width: int,
     view_height: int,
     fg_image: Optional[Image] = None,
@@ -681,13 +677,6 @@ def render_frame_camera(
     else:
         crop = bg_image[cam_y : cam_y + view_height, cam_x : cam_x + view_width]
         frame[: crop.shape[0], : crop.shape[1]] = crop
-
-    # TODO: this is a hack, the Goal should just be another NPC!
-    if goal_position:
-        goal_sprite = assets.get_sprite("goal")
-        goal_screen_x = goal_position[0] - cam_x
-        goal_screen_y = goal_position[1] - cam_y
-        overlay_image(frame, goal_sprite, goal_screen_x, goal_screen_y)
 
     # Build list of renderable entities (hero + NPCs) sorted by base bottom y
     # Entities with lower y (higher on screen) render first

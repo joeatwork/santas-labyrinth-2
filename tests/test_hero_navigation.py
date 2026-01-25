@@ -64,12 +64,20 @@ class MockDungeon:
                 self._tile_to_room[(r, c)] = room_id
 
     def set_goal(self, tile_row: int, tile_col: int) -> None:
-        """Place goal at specific tile coordinates."""
-        self.map[tile_row, tile_col] = Tile.GOAL
-        self._goal_position = (
-            tile_col * TILE_SIZE + TILE_SIZE / 2,
-            tile_row * TILE_SIZE + TILE_SIZE / 2
+        """Place goal NPC at specific tile coordinates."""
+        # Remove existing goal NPC if present
+        self.npcs = [npc for npc in self.npcs if not npc.is_goal]
+        # Create goal NPC
+        goal_npc = NPC(
+            x=tile_col * TILE_SIZE + TILE_SIZE / 2,
+            y=tile_row * TILE_SIZE + TILE_SIZE / 2,
+            sprite_name="goal",
+            npc_id="goal",
+            is_goal=True,
         )
+        goal_npc.room_id = self.get_room_id(goal_npc.x, goal_npc.y)
+        self.npcs.append(goal_npc)
+        self._goal_position = (goal_npc.x, goal_npc.y)
 
     def mark_corridor_tile(self, tile_row: int, tile_col: int, adjacent_room_id: int) -> None:
         """Mark a tile as part of a corridor (not belonging to any room)."""
@@ -113,7 +121,6 @@ class MockDungeon:
     # Tiles that can be walked on (matches Dungeon.WALKABLE_TILES)
     WALKABLE_TILES = (
         Tile.FLOOR,
-        Tile.GOAL,
         Tile.NORTH_DOOR_WEST,
         Tile.NORTH_DOOR_EAST,
         Tile.SOUTH_DOOR_WEST,
@@ -134,8 +141,20 @@ class MockDungeon:
         """Check if a tile at (row, col) is walkable."""
         if 0 <= row < self.rows and 0 <= col < self.cols:
             tile = self.map[row, col]
-            return tile in self.WALKABLE_TILES
+            if tile not in self.WALKABLE_TILES:
+                return False
+            # Check if an NPC occupies this tile
+            if self.find_npc_at_tile(row, col) is not None:
+                return False
+            return True
         return False
+
+    def find_npc_at_tile(self, row: int, col: int) -> Optional[NPC]:
+        """Find NPC occupying this tile."""
+        for npc in self.npcs:
+            if npc.occupies_tile(row, col):
+                return npc
+        return None
 
     def get_room_id(self, x: float, y: float) -> int:
         tile_col = int(x / TILE_SIZE)
@@ -148,7 +167,17 @@ class MockDungeon:
         room_col = tile_col // ROOM_WIDTH
         return room_row * self.rooms_wide + room_col
 
+    def find_goal_npc(self) -> Optional[NPC]:
+        """Returns the Goal NPC if present, or None."""
+        for npc in self.npcs:
+            if npc.is_goal:
+                return npc
+        return None
+
     def find_goal_position(self) -> Optional[Tuple[float, float]]:
+        goal_npc = self.find_goal_npc()
+        if goal_npc is not None:
+            return (goal_npc.x, goal_npc.y)
         return self._goal_position
 
     def find_doors_in_room(self, room_id: int) -> List[Tuple[int, int]]:

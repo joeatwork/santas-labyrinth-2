@@ -438,27 +438,38 @@ class DungeonWalk(Content):
             if self.goal_movie.is_complete():
                 self.goal_movie.enter()
 
-        if self.dungeon.is_on_goal(self.hero.x, self.hero.y):
-            print(
-                "DungeonWalk: Hero reached goal, switching to goal movie video...",
-                file=sys.stderr,
-            )
-            # Don't re-enter goal_movie - keep audio playing uninterrupted
-            self.hit_goal = True
-            return
-
         # Update hero - may return InteractCommand if strategy wants to talk
         if self.hero and self.dungeon:
             interact_cmd = self.hero.update(dt, self.dungeon)
             if interact_cmd is not None:
+                npc = interact_cmd.npc
+
+                # Check if this is the Goal NPC
+                if npc.is_goal:
+                    print(
+                        "DungeonWalk: Hero interacted with goal, switching to goal movie video...",
+                        file=sys.stderr,
+                    )
+                    # Call on_interact callback if present
+                    if npc.on_interact is not None:
+                        npc.on_interact()
+                    # Don't re-enter goal_movie - keep audio playing uninterrupted
+                    self.hit_goal = True
+                    # End hero's talking state since there's no conversation
+                    self.hero.end_conversation()
+                    return
+
                 # Hero entered 'talking' state, start conversation overlay
-                if interact_cmd.npc.conversation_engine is not None:
-                    self.conversation_npc = interact_cmd.npc
+                if npc.conversation_engine is not None:
+                    self.conversation_npc = npc
                     self.conversation_overlay = ConversationOverlay(
-                        interact_cmd.npc.conversation_engine,
+                        npc.conversation_engine,
                         self.assets
                     )
                     self.conversation_overlay.enter()
+                    # Call on_interact callback if present (for regular NPCs too)
+                    if npc.on_interact is not None:
+                        npc.on_interact()
                 return
 
             # Track idle time for crash detection
@@ -489,13 +500,9 @@ class DungeonWalk(Content):
             cam_x = max(0, min(cam_x, map_w - width))
             cam_y = max(0, min(cam_y, map_h - height))
 
-            # TODO: goal should just be another npc
-            goal_position = self.dungeon.find_goal_position()
-
             # Render base frame with hero and foreground
-            # TODO: npcs and goal should be rendered as part of render_frame_camera
             base_frame = render_frame_camera(
-                self.background, self.assets, self.hero, self.dungeon.npcs, goal_position, width, height, self.foreground
+                self.background, self.assets, self.hero, self.dungeon.npcs, width, height, self.foreground
             )
         else:
             base_frame = np.zeros((height, width, 3), np.uint8)

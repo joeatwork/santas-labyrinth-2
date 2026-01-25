@@ -173,7 +173,7 @@ class GoalSeekingStrategy(Strategy):
 
         current_room = dungeon.get_room_id(x, y)
 
-        # check if there is anyone to talk to
+        # Check if there are NPCs to talk to
         npcs_around = dungeon.get_npcs_in_room(current_room)
         new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met]
         for friend in new_npcs:
@@ -182,14 +182,12 @@ class GoalSeekingStrategy(Strategy):
                 self.next_goal_row, self.next_goal_col = approach
                 return
 
-
-        # check if goal is in the same room
-        goal_pos = dungeon.find_goal_position()
-        if goal_pos:
-            goal_room = dungeon.get_room_id(goal_pos[0], goal_pos[1])
-            if current_room == goal_room:
-                self.next_goal_row = int(goal_pos[1] // TILE_SIZE)
-                self.next_goal_col = int(goal_pos[0] // TILE_SIZE)
+        # Check if the Goal NPC is in the same room (always approach, even if "met")
+        goal_npc = dungeon.find_goal_npc()
+        if goal_npc is not None and goal_npc.room_id == current_room:
+            approach = self._find_npc_approach_tile(goal_npc, dungeon)
+            if approach is not None:
+                self.next_goal_row, self.next_goal_col = approach
                 return
 
         # Otherwise, pick a door
@@ -298,10 +296,15 @@ class GoalSeekingStrategy(Strategy):
             self.path_index = 0
             self._path_target = None
 
-        # Check if we have an available conversation
+        # Check if adjacent to the Goal NPC first (highest priority interaction)
+        goal_npc = dungeon.find_goal_npc()
+        if goal_npc is not None and dungeon.is_adjacent_to_npc(hero_row, hero_col, goal_npc):
+            return InteractCommand(goal_npc)
+
+        # Check if we have an available conversation with regular NPCs
         room_id = dungeon.get_room_id_for_tile(hero_row, hero_col)
         npcs_around = dungeon.get_npcs_in_room(room_id)
-        new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met]
+        new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met and not npc.is_goal]
         for friend in new_npcs:
             if dungeon.is_adjacent_to_npc(hero_row, hero_col, friend):
                 self.npcs_met.add(friend.npc_id)

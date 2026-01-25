@@ -12,6 +12,34 @@ from .dungeon_gen import create_random_dungeon
 from .world import Dungeon, Hero
 
 
+def create_goal_npc(
+    tile_col: int,
+    tile_row: int,
+) -> NPC:
+    """
+    Create a Goal NPC at the given tile position.
+
+    The goal is a 64x64 sprite (single tile) that the hero can interact with.
+    Unlike other NPCs, the goal has no conversation - instead it triggers
+    a callback when the hero interacts with it.
+
+    Args:
+        tile_col: Column of the tile
+        tile_row: Row of the tile
+    """
+    # Calculate pixel position (center of 1-tile base)
+    x = tile_col * TILE_SIZE + TILE_SIZE / 2
+    y = tile_row * TILE_SIZE + TILE_SIZE / 2
+
+    return NPC(
+        x=x,
+        y=y,
+        sprite_name="goal",
+        npc_id="goal",
+        is_goal=True,
+    )
+
+
 def create_robot_priest(
     tile_col: int,
     tile_row: int,

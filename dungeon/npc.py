@@ -62,8 +62,16 @@ class NPC:
     # TODO: should on_conversation_complete live in a ConversationEngine?
     on_conversation_complete: Optional[Callable[[], None]] = field(default=None, repr=False)
 
+    # Callback invoked when the hero interacts with this NPC (before conversation starts)
+    # For NPCs without conversation_engine (like Goal), this handles the interaction
+    # Receives no arguments; use closure to capture needed state
+    on_interact: Optional[Callable[[], None]] = field(default=None, repr=False)
+
     # Unique identifier for tracking interaction state
     npc_id: str = ""
+
+    # Whether this NPC is the goal (special handling for goal-seeking strategy)
+    is_goal: bool = False
 
     # Room assignment (set by Dungeon when placed)
     room_id: Optional[int] = None

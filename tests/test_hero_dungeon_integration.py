@@ -5,11 +5,12 @@ import random
 import numpy as np
 from dungeon.world import Hero, Dungeon, TILE_SIZE
 from dungeon.dungeon_gen import create_random_dungeon
+from dungeon.strategy import InteractCommand
 
 
 def run_hero_to_goal(dungeon: Dungeon, max_steps: int = 10000, dt: float = 0.1) -> tuple[bool, int, str]:
     """
-    Run the hero through a dungeon until it reaches the goal, gets stuck, or throws.
+    Run the hero through a dungeon until it interacts with the goal, gets stuck, or throws.
 
     Returns:
         (reached_goal, steps_taken, failure_reason)
@@ -25,12 +26,12 @@ def run_hero_to_goal(dungeon: Dungeon, max_steps: int = 10000, dt: float = 0.1) 
     max_stuck_steps = 100  # Consider stuck if no movement for this many steps
 
     for step in range(max_steps):
-        # Check if hero reached the goal
-        if dungeon.is_on_goal(hero.x, hero.y):
-            return (True, step, "")
-
         # Run one update cycle - let exceptions propagate
-        hero.update(dt, dungeon)
+        result = hero.update(dt, dungeon)
+
+        # Check if hero interacted with the goal NPC
+        if isinstance(result, InteractCommand) and result.npc.is_goal:
+            return (True, step, "")
 
         # Check if hero is stuck (not moving)
         current_position = (hero.x, hero.y)

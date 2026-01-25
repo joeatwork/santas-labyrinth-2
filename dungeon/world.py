@@ -2,7 +2,10 @@ import math
 from .dungeon_gen import Tile, DungeonMap, RoomTemplate
 from .strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
 from .npc import NPC
-from typing import Tuple, List, Optional, Callable, Dict, Any
+from typing import Tuple, List, Optional, Callable, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .setup import create_goal_npc
 
 TILE_SIZE: int = 64
 
@@ -38,7 +41,6 @@ class Dungeon:
     # Tiles that can be walked on
     WALKABLE_TILES = (
         Tile.FLOOR,
-        Tile.GOAL,
         Tile.NORTH_DOOR_WEST,
         Tile.NORTH_DOOR_EAST,
         Tile.SOUTH_DOOR_WEST,
@@ -88,29 +90,24 @@ class Dungeon:
         return 0
         
 
-    # TODO: caller wants a tile position, not a pixel position!
-    def find_goal_position(self) -> Optional[Tuple[int, int]]:
-        """Returns pixel position (x, y) of the goal tile, or None if not found."""
-        for row in range(self.rows):
-            for col in range(self.cols):
-                if self.map[row, col] == Tile.GOAL:
-                    return (
-                        col * TILE_SIZE + TILE_SIZE // 2,
-                        row * TILE_SIZE + TILE_SIZE // 2,
-                    )
+    def find_goal_npc(self) -> Optional[NPC]:
+        """Returns the Goal NPC if present, or None."""
+        for npc in self.npcs:
+            if npc.is_goal:
+                return npc
         return None
 
-    def is_on_goal(self, x: float, y: float) -> bool:
-        """Returns True if the given pixel position is on the goal tile."""
-        col = int(x / TILE_SIZE)
-        row = int(y / TILE_SIZE)
-        if 0 <= row < self.rows and 0 <= col < self.cols:
-            return self.map[row, col] == Tile.GOAL
-        return False
+    # TODO: caller wants a tile position, not a pixel position!
+    def find_goal_position(self) -> Optional[Tuple[int, int]]:
+        """Returns pixel position (x, y) of the goal, or None if not found."""
+        goal_npc = self.find_goal_npc()
+        if goal_npc is not None:
+            return (int(goal_npc.x), int(goal_npc.y))
+        return None
 
     def place_goal(self, room_id: int) -> Tuple[int, int]:
         """
-        Place the goal tile in the specified room.
+        Place the goal NPC in the specified room.
 
         If a goal already exists, it is removed first.
 
@@ -124,12 +121,10 @@ class Dungeon:
             RuntimeError: If the room doesn't exist or no suitable floor tile can be found.
         """
         from .dungeon_gen import find_floor_tile_in_room, Position
+        from .setup import create_goal_npc
 
-        # Remove existing goal if present
-        for row in range(self.rows):
-            for col in range(self.cols):
-                if self.map[row, col] == Tile.GOAL:
-                    self.map[row, col] = Tile.FLOOR
+        # Remove existing goal NPC if present
+        self.remove_goal()
 
         if room_id not in self.room_positions:
             raise RuntimeError(f"Room {room_id} does not exist")
@@ -141,18 +136,24 @@ class Dungeon:
 
         # Find a floor tile in the room
         goal_pos = find_floor_tile_in_room(self.map, room_pos, template)
-        self.map[goal_pos.row, goal_pos.column] = Tile.GOAL
+
+        # Create and add the goal NPC
+        goal_npc = create_goal_npc(goal_pos.column, goal_pos.row)
+        self.add_npc(goal_npc)
 
         return (goal_pos.column, goal_pos.row)
 
+    def remove_goal(self) -> None:
+        """Remove the goal NPC from the dungeon if present."""
+        self.npcs = [npc for npc in self.npcs if not npc.is_goal]
+
     def distance_to_goal(self, x: float, y: float) -> float:
-        """Returns Euclidean distance in pixels from position (x, y) to the goal."""
-        goal_pos = self.find_goal_position()
-        if goal_pos is None:
+        """Returns Euclidean distance in pixels from position (x, y) to the goal NPC."""
+        goal_npc = self.find_goal_npc()
+        if goal_npc is None:
             return float("inf")
-        goal_x, goal_y = goal_pos
-        dx = goal_x - x
-        dy = goal_y - y
+        dx = goal_npc.x - x
+        dy = goal_npc.y - y
         return math.sqrt(dx * dx + dy * dy)
 
     def find_doors_in_room(self, room_id: int) -> List[Tuple[int, int]]:

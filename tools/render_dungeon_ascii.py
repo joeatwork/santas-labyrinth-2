@@ -43,7 +43,6 @@ TILE_TO_ASCII = {
     Tile.WEST_DOOR_SOUTH: "W",
     Tile.EAST_DOOR_NORTH: "e",
     Tile.EAST_DOOR_SOUTH: "E",
-    Tile.GOAL: "G",
     # Doorframes (render same as doors for simplicity)
     Tile.NORTH_DOORFRAME_WEST: "n",
     Tile.NORTH_DOORFRAME_EAST: "N",

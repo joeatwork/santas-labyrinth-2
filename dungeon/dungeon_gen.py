@@ -657,6 +657,7 @@ def generate_dungeon(
     Tuple[int, int],
     Dict[int, Tuple[int, int]],
     Dict[int, RoomTemplate],
+    Optional[int],
 ]:
     """
     Generates a dungeon by organically growing rooms from open doors.
@@ -665,14 +666,15 @@ def generate_dungeon(
 
     Parameters:
         num_rooms: Target number of rooms to generate
-        place_goal: If True, place the goal tile in the last room.
-                    If False, no goal is placed (can be added later via Dungeon.place_goal()).
+        place_goal: If True, return the last_room_id for goal placement.
+                    If False, no goal room is returned (can be placed later via Dungeon.place_goal()).
 
     Returns:
         dungeon_map: The tile map
         start_pos_pixel: Starting position in pixels
         room_positions: Dict mapping room_id to (tile_x, tile_y) position
         room_assignments: Dict mapping room_id to RoomTemplate used
+        goal_room_id: The room_id where the goal should be placed (if place_goal=True), else None
     """
     target_num_rooms = num_rooms
 
@@ -805,13 +807,8 @@ def generate_dungeon(
         last_room_id = next_room_id
         next_room_id += 1
 
-    # Place goal in the last room added, ensuring it's on a FLOOR tile
-    if place_goal:
-        goal_room_id = last_room_id
-        goal_pos = room_positions[goal_room_id]
-        goal_template = room_assignments[goal_room_id]
-        goal_floor_pos = find_floor_tile_in_room(dungeon_map, goal_pos, goal_template)
-        dungeon_map[goal_floor_pos.row, goal_floor_pos.column] = Tile.GOAL
+    # Determine goal room (last room added)
+    goal_room_id: Optional[int] = last_room_id if place_goal else None
 
     # Replace all unconnected doors with walls
     _replace_blind_doors_with_walls(
@@ -840,7 +837,7 @@ def generate_dungeon(
     for room_id, pos in room_positions_adjusted.items():
         room_positions_final[room_id] = (pos.column, pos.row)
 
-    return dungeon_map, start_pos_pixel, room_positions_final, room_assignments
+    return dungeon_map, start_pos_pixel, room_positions_final, room_assignments, goal_room_id
 
 
 def create_random_dungeon(
@@ -852,7 +849,7 @@ def create_random_dungeon(
 
     Parameters:
         num_rooms: Target number of rooms to generate
-        place_goal: If True, place the goal tile in the last room.
+        place_goal: If True, place the goal NPC in the last room.
                     If False, no goal is placed (can be added later via Dungeon.place_goal()).
 
     Returns:
@@ -860,7 +857,13 @@ def create_random_dungeon(
     """
     from .world import Dungeon
 
-    dungeon_map, start_pos, room_positions, room_templates = generate_dungeon(
+    dungeon_map, start_pos, room_positions, room_templates, goal_room_id = generate_dungeon(
         num_rooms, place_goal=place_goal
     )
-    return Dungeon(dungeon_map, start_pos, room_positions, room_templates)
+    dungeon = Dungeon(dungeon_map, start_pos, room_positions, room_templates)
+
+    # Place goal NPC if requested
+    if goal_room_id is not None:
+        dungeon.place_goal(goal_room_id)
+
+    return dungeon
