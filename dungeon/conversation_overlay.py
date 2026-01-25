@@ -111,16 +111,18 @@ class ConversationOverlay:
                 portrait_x = box_x + box_width - portrait_width - 10
                 portrait_y = box_y + 10
 
-                # Convert portrait and overlay onto PIL image
+                # Convert portrait and overlay onto PIL image with alpha blending
                 if portrait.shape[2] == 4:
                     portrait_pil = PILImage.fromarray(
                         cv2.cvtColor(portrait, cv2.COLOR_BGRA2RGBA)
                     )
+                    # Use alpha channel as mask for proper blending
+                    pil_image.paste(portrait_pil, (portrait_x, portrait_y), mask=portrait_pil)
                 else:
                     portrait_pil = PILImage.fromarray(
                         cv2.cvtColor(portrait, cv2.COLOR_BGR2RGB)
                     )
-                pil_image.paste(portrait_pil, (portrait_x, portrait_y))
+                    pil_image.paste(portrait_pil, (portrait_x, portrait_y))
 
                 # Reduce text width to account for portrait
                 text_right_margin = portrait_width + 30
