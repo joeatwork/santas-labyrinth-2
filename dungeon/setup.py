@@ -69,7 +69,7 @@ def create_robot_priest(
     return NPC(
         x=x,
         y=y,
-        sprite_name="robot_priest",
+        sprite_name="indora_god",
         conversation_engine=conversation,
         npc_id="robot_priest",
     )
