@@ -98,43 +98,42 @@ class ConversationOverlay:
             width=3,
         )
 
-        # Portrait area (left side of box if portrait exists)
-        text_x_offset = 20
-        portrait_size = box_height - 20
+        # Portrait area (right side of box if portrait exists)
+        text_right_margin = 20
 
         if self.current_page.portrait_sprite:
             portrait = self.assets.get_sprite(self.current_page.portrait_sprite)
             if portrait is not None:
-                # Resize portrait to fit
-                portrait_resized = cv2.resize(portrait, (portrait_size, portrait_size))
+                # Use original sprite size
+                portrait_height, portrait_width = portrait.shape[:2]
 
-                # Portrait position
-                portrait_x = box_x + 10
+                # Portrait position (right side top)
+                portrait_x = box_x + box_width - portrait_width - 10
                 portrait_y = box_y + 10
 
                 # Convert portrait and overlay onto PIL image
-                if portrait_resized.shape[2] == 4:
+                if portrait.shape[2] == 4:
                     portrait_pil = PILImage.fromarray(
-                        cv2.cvtColor(portrait_resized, cv2.COLOR_BGRA2RGBA)
+                        cv2.cvtColor(portrait, cv2.COLOR_BGRA2RGBA)
                     )
                 else:
                     portrait_pil = PILImage.fromarray(
-                        cv2.cvtColor(portrait_resized, cv2.COLOR_BGR2RGB)
+                        cv2.cvtColor(portrait, cv2.COLOR_BGR2RGB)
                     )
                 pil_image.paste(portrait_pil, (portrait_x, portrait_y))
 
-                # Shift text to right of portrait
-                text_x_offset = portrait_size + 30
+                # Reduce text width to account for portrait
+                text_right_margin = portrait_width + 30
 
         # Draw speaker name
-        text_x = box_x + text_x_offset
+        text_x = box_x + 20
         text_y = box_y + 15
         speaker_name = self.current_page.speaker.upper()
         draw.text((text_x, text_y), speaker_name, fill=(0, 0, 0), font=self.assets.fonts['small'])
 
         # Draw text (with word wrapping)
         text_y += 25
-        max_text_width = box_width - text_x_offset - 20
+        max_text_width = box_width - 20 - text_right_margin
 
         lines = self._wrap_text(self.current_page.text, draw, self.assets.fonts['regular'], max_text_width)
 
