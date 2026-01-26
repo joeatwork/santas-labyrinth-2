@@ -911,8 +911,9 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
         replace=[(0, 0, MetalTile.SOUTH_WALL)],
     ),
     TilePattern(
-        match=[(0, 0, SOUTHERN_EDGE_WEST_WALL), (0, 1, _Y(MetalTile.CONVEX_NE))],
-        replace=[(0, 1, MetalTile.WEST_WALL)],
+        # CONVEX_NE's west wall exits to the NORTH, so check ABOVE for continuing wall
+        match=[(-1, 0, SOUTHERN_EDGE_WEST_WALL), (0, 0, _Y(MetalTile.CONVEX_NE))],
+        replace=[(0, 0, MetalTile.WEST_WALL)],
     ),
     TilePattern(
         match=[(0, 0, EASTERN_EDGE_SOUTH_WALL), (1, 0, _Y(MetalTile.CONVEX_NW))],
@@ -982,26 +983,14 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
         replace=[(1, 0, MetalTile.SW_CORNER)],
     ),
     TilePattern(
-        match=[(0, 0, SOUTHERN_EDGE_WEST_WALL), (-1, 1, EASTERN_EDGE_NORTH_WALL)],
+        # SE_CORNER: SOUTH_WALL to the left (west), EAST_WALL above (north)
+        match=[(0, 0, WESTERN_EDGE_SOUTH_WALL), (-1, 1, SOUTHERN_EDGE_EAST_WALL)],
         replace=[(0, 1, MetalTile.SE_CORNER)],
     ),
-    # Convex corners
-    TilePattern( # BAD PATTERN?
-        match=[(0, 0, EASTERN_EDGE_NORTH_WALL), (1, -1, SOUTHERN_EDGE_WEST_WALL)],
-        replace=[(1, 0, MetalTile.CONVEX_SE)],
-    ),
-    TilePattern(
-        match=[(0, 0, SOUTHERN_EDGE_EAST_WALL), (1, 1, WESTERN_EDGE_NORTH_WALL)],
-        replace=[(0, 1, MetalTile.CONVEX_SW)],
-    ),
-    TilePattern(
-        match=[(0, 0, EASTERN_EDGE_SOUTH_WALL), (1, 1, NORTHERN_EDGE_WEST_WALL)],
-        replace=[(1, 0, MetalTile.CONVEX_NE)],
-    ),
-    TilePattern(
-        match=[(0, 0, NORTHERN_EDGE_EAST_WALL), (1, -1, WESTERN_EDGE_SOUTH_WALL)],
-        replace=[(1, 0, MetalTile.CONVEX_NW)],
-    ),
+    # Note: Convex corners are placed by door boundary patterns below.
+    # Previously there were patterns here that conflicted with the regular
+    # corner patterns above (same match conditions, different replacements).
+    # Those have been removed.
     # Ensure well formed doors
     # North/South doors are horizontally adjacent: WEST half at (0,0), EAST half at (0,1)
     TilePattern(
@@ -1073,63 +1062,75 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
         replace=[(0, -1, MetalTile.FLOOR)],
     ),
     # Ensure door boundaries
-    # We replace with convex corners, hoping they'll turn into straight walls
-    # in a future pass if needed
+    # Each door half needs a convex corner at the appropriate position.
+    # Based on check_valid_tiling requirements:
+    #
+    # North/South doors are horizontal, need corners to LEFT and RIGHT:
+    #   NORTH_DOOR_WEST needs CONVEX_NE to the LEFT (0, -1)
+    #   NORTH_DOOR_EAST needs CONVEX_NW to the RIGHT (0, 1)
+    #   SOUTH_DOOR_WEST needs CONVEX_SE to the LEFT (0, -1)
+    #   SOUTH_DOOR_EAST needs CONVEX_SW to the RIGHT (0, 1)
+    #
+    # West/East doors are vertical, need corners ABOVE and BELOW:
+    #   WEST_DOOR_NORTH needs CONVEX_SE ABOVE (-1, 0)
+    #   WEST_DOOR_SOUTH needs CONVEX_NE BELOW (1, 0)
+    #   EAST_DOOR_NORTH needs CONVEX_SW ABOVE (-1, 0)
+    #   EAST_DOOR_SOUTH needs CONVEX_NW BELOW (1, 0)
     TilePattern(
         match=[
             (0, 0, _Y(MetalTile.NORTH_DOOR_WEST)),
+            (0, -1, _N(MetalTile.NORTH_WALL, MetalTile.CONVEX_NE)),
+        ],
+        replace=[(0, -1, MetalTile.CONVEX_NE)],
+    ),
+    TilePattern(
+        match=[
+            (0, 0, _Y(MetalTile.NORTH_DOOR_EAST)),
+            (0, 1, _N(MetalTile.NORTH_WALL, MetalTile.CONVEX_NW)),
+        ],
+        replace=[(0, 1, MetalTile.CONVEX_NW)],
+    ),
+    TilePattern(
+        match=[
+            (0, 0, _Y(MetalTile.SOUTH_DOOR_WEST)),
+            (0, -1, _N(MetalTile.SOUTH_WALL, MetalTile.CONVEX_SE)),
+        ],
+        replace=[(0, -1, MetalTile.CONVEX_SE)],
+    ),
+    TilePattern(
+        match=[
+            (0, 0, _Y(MetalTile.SOUTH_DOOR_EAST)),
+            (0, 1, _N(MetalTile.SOUTH_WALL, MetalTile.CONVEX_SW)),
+        ],
+        replace=[(0, 1, MetalTile.CONVEX_SW)],
+    ),
+    TilePattern(
+        match=[
+            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH)),
             (-1, 0, _N(MetalTile.WEST_WALL, MetalTile.CONVEX_SE)),
         ],
         replace=[(-1, 0, MetalTile.CONVEX_SE)],
     ),
     TilePattern(
         match=[
-            (0, 0, _Y(MetalTile.NORTH_DOOR_EAST)),
-            (1, 0, _N(MetalTile.EAST_WALL, MetalTile.CONVEX_SW)),
-        ],
-        replace=[(1, 0, MetalTile.CONVEX_SW)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_WEST)),
-            (-1, 0, _N(MetalTile.WEST_WALL, MetalTile.CONVEX_NE)),
-        ],
-        replace=[(-1, 0, MetalTile.CONVEX_NE)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_EAST)),
-            (1, 0, _N(MetalTile.EAST_WALL, MetalTile.CONVEX_NW)),
-        ],
-        replace=[(1, 0, MetalTile.CONVEX_NW)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH)),
-            (0, -1, _N(MetalTile.NORTH_WALL, MetalTile.CONVEX_SE)),
-        ],
-        replace=[(0, -1, MetalTile.CONVEX_SE)],
-    ),
-    TilePattern(
-        match=[
             (0, 0, _Y(MetalTile.WEST_DOOR_SOUTH)),
-            (0, 1, _N(MetalTile.SOUTH_WALL, MetalTile.CONVEX_NE)),
+            (1, 0, _N(MetalTile.WEST_WALL, MetalTile.CONVEX_NE)),
         ],
-        replace=[(-1, 0, MetalTile.CONVEX_NE)],
+        replace=[(1, 0, MetalTile.CONVEX_NE)],
     ),
     TilePattern(
         match=[
             (0, 0, _Y(MetalTile.EAST_DOOR_NORTH)),
-            (0, -1, _N(MetalTile.NORTH_WALL, MetalTile.CONVEX_SW)),
+            (-1, 0, _N(MetalTile.EAST_WALL, MetalTile.CONVEX_SW)),
         ],
         replace=[(-1, 0, MetalTile.CONVEX_SW)],
     ),
     TilePattern(
         match=[
             (0, 0, _Y(MetalTile.EAST_DOOR_SOUTH)),
-            (0, 1, _N(MetalTile.SOUTH_WALL, MetalTile.CONVEX_NW)),
+            (1, 0, _N(MetalTile.EAST_WALL, MetalTile.CONVEX_NW)),
         ],
-        replace=[(-1, 0, MetalTile.CONVEX_NW)],
+        replace=[(1, 0, MetalTile.CONVEX_NW)],
     ),
 ]
 

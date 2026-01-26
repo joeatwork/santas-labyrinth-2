@@ -414,3 +414,255 @@ class TestTilePatterns:
             f"Expected FLOOR at (0,0), got {MetalTile(tiles[0, 0]).name}"
         )
         assert replacements > 0, "Expected at least one replacement"
+
+    def test_north_door_boundary_corners_left_and_right(self):
+        """
+        Test that north door boundary patterns place corners to LEFT and RIGHT.
+
+        NORTH_DOOR_WEST needs CONVEX_NE to the LEFT (0, -1)
+        NORTH_DOOR_EAST needs CONVEX_NW to the RIGHT (0, 1)
+
+        Before:            After:
+        . n N .  (row 0)   ! n N ^
+
+        Where n=NORTH_DOOR_WEST, N=NORTH_DOOR_EAST,
+              !=CONVEX_NE, ^=CONVEX_NW, .=FLOOR
+        """
+        tiles = np.array(
+            [[MetalTile.FLOOR, MetalTile.NORTH_DOOR_WEST, MetalTile.NORTH_DOOR_EAST, MetalTile.FLOOR]],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # Left of NORTH_DOOR_WEST should be CONVEX_NE
+        assert tiles[0, 0] == MetalTile.CONVEX_NE, (
+            f"Expected CONVEX_NE at (0,0), got {MetalTile(tiles[0, 0]).name}"
+        )
+        # Right of NORTH_DOOR_EAST should be CONVEX_NW
+        assert tiles[0, 3] == MetalTile.CONVEX_NW, (
+            f"Expected CONVEX_NW at (0,3), got {MetalTile(tiles[0, 3]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
+
+    def test_west_door_boundary_corners_above_and_below(self):
+        """
+        Test that west door boundary patterns place corners ABOVE and BELOW.
+
+        WEST_DOOR_NORTH needs CONVEX_SE ABOVE (-1, 0)
+        WEST_DOOR_SOUTH needs CONVEX_NE BELOW (1, 0)
+
+        Before:       After:
+        .  (row 0)    `  (CONVEX_SE)
+        w  (row 1)    w
+        W  (row 2)    W
+        .  (row 3)    !  (CONVEX_NE)
+
+        Where w=WEST_DOOR_NORTH, W=WEST_DOOR_SOUTH,
+              `=CONVEX_SE, !=CONVEX_NE, .=FLOOR
+        """
+        tiles = np.array(
+            [
+                [MetalTile.FLOOR],
+                [MetalTile.WEST_DOOR_NORTH],
+                [MetalTile.WEST_DOOR_SOUTH],
+                [MetalTile.FLOOR],
+            ],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # Above WEST_DOOR_NORTH should be CONVEX_SE
+        assert tiles[0, 0] == MetalTile.CONVEX_SE, (
+            f"Expected CONVEX_SE at (0,0), got {MetalTile(tiles[0, 0]).name}"
+        )
+        # Below WEST_DOOR_SOUTH should be CONVEX_NE
+        assert tiles[3, 0] == MetalTile.CONVEX_NE, (
+            f"Expected CONVEX_NE at (3,0), got {MetalTile(tiles[3, 0]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
+
+    def test_east_door_boundary_corners_above_and_below(self):
+        """
+        Test that east door boundary patterns place corners ABOVE and BELOW.
+
+        EAST_DOOR_NORTH needs CONVEX_SW ABOVE (-1, 0)
+        EAST_DOOR_SOUTH needs CONVEX_NW BELOW (1, 0)
+
+        Before:       After:
+        .  (row 0)    ~  (CONVEX_SW)
+        e  (row 1)    e
+        E  (row 2)    E
+        .  (row 3)    ^  (CONVEX_NW)
+
+        Where e=EAST_DOOR_NORTH, E=EAST_DOOR_SOUTH,
+              ~=CONVEX_SW, ^=CONVEX_NW, .=FLOOR
+        """
+        tiles = np.array(
+            [
+                [MetalTile.FLOOR],
+                [MetalTile.EAST_DOOR_NORTH],
+                [MetalTile.EAST_DOOR_SOUTH],
+                [MetalTile.FLOOR],
+            ],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # Above EAST_DOOR_NORTH should be CONVEX_SW
+        assert tiles[0, 0] == MetalTile.CONVEX_SW, (
+            f"Expected CONVEX_SW at (0,0), got {MetalTile(tiles[0, 0]).name}"
+        )
+        # Below EAST_DOOR_SOUTH should be CONVEX_NW
+        assert tiles[3, 0] == MetalTile.CONVEX_NW, (
+            f"Expected CONVEX_NW at (3,0), got {MetalTile(tiles[3, 0]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
+
+    def test_useless_convex_ne_with_south_wall_to_right(self):
+        """
+        Test the pattern that replaces CONVEX_NE with SOUTH_WALL when there's
+        a south wall continuing to its right.
+
+        CONVEX_NE = junction of SOUTH_WALL + WEST_WALL, points NE into room.
+        - Its south wall component runs along the NORTH edge (faces north)
+        - Its west wall component runs along the EAST edge (faces east)
+
+        If there's a south wall to the right, the CONVEX_NE's south wall
+        component is redundant - it should just be a plain SOUTH_WALL.
+
+        Before:       After:
+        ! _           _ _
+
+        Where !=CONVEX_NE, _=SOUTH_WALL
+        """
+        tiles = np.array(
+            [[MetalTile.CONVEX_NE, MetalTile.SOUTH_WALL]],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        assert tiles[0, 0] == MetalTile.SOUTH_WALL, (
+            f"Expected SOUTH_WALL at (0,0), got {MetalTile(tiles[0, 0]).name}"
+        )
+        assert replacements > 0
+
+    def test_convex_ne_not_replaced_when_west_wall_to_left(self):
+        """
+        CONVEX_NE should NOT become WEST_WALL when there's a west wall to its LEFT.
+
+        West walls run north-south. A west wall to the LEFT of CONVEX_NE
+        doesn't continue into CONVEX_NE - that would be going INTO the room.
+
+            col0  col1
+            [     !      ([ = WEST_WALL, ! = CONVEX_NE)
+
+        The CONVEX_NE should remain unchanged (the pattern should not fire).
+        """
+        tiles = np.array(
+            [[MetalTile.WEST_WALL, MetalTile.CONVEX_NE]],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # CONVEX_NE should NOT be replaced - it stays as CONVEX_NE
+        assert tiles[0, 1] == MetalTile.CONVEX_NE, (
+            f"CONVEX_NE should not be replaced when west wall is to the left, "
+            f"got {MetalTile(tiles[0, 1]).name}"
+        )
+
+    def test_convex_ne_to_west_wall_correct_direction(self):
+        """
+        CONVEX_NE should become WEST_WALL when there's a west wall ABOVE it.
+
+        CONVEX_NE's west wall component runs north-south on its EAST edge,
+        with the wall going out the NORTH edge of the tile. So if there's
+        a west wall above, CONVEX_NE just continues that wall.
+
+            row0: [   (WEST_WALL - its southern edge goes down)
+            row1: !   (CONVEX_NE - should become WEST_WALL)
+
+        After: both tiles are WEST_WALL, forming a contiguous wall.
+        """
+        tiles = np.array(
+            [
+                [MetalTile.WEST_WALL],
+                [MetalTile.CONVEX_NE],
+            ],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # This SHOULD work if the pattern were correct
+        # Currently it won't because the pattern checks the wrong direction
+        assert tiles[1, 0] == MetalTile.WEST_WALL, (
+            f"CONVEX_NE should become WEST_WALL when west wall is above, "
+            f"got {MetalTile(tiles[1, 0]).name}"
+        )
+
+    def test_sw_corner_placed_between_east_and_north_walls(self):
+        """
+        Test that SW_CORNER is placed where an east wall meets a north wall.
+
+        Previously there was a conflicting CONVEX_SW pattern with identical
+        match conditions that would also fire, producing invalid tiling.
+        That pattern has been removed.
+
+            col0  col1
+        row0:  ]    .     (] = EAST_WALL going south)
+        row1:  ?    -     (- = NORTH_WALL going west, ? = where SW_CORNER goes)
+
+        After: SW_CORNER at (1,0) connecting the walls.
+        """
+        tiles = np.array(
+            [
+                [MetalTile.EAST_WALL, MetalTile.FLOOR],
+                [MetalTile.FLOOR, MetalTile.NORTH_WALL],
+            ],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # SW_CORNER should be placed at (1,0)
+        assert tiles[1, 0] == MetalTile.SW_CORNER, (
+            f"Expected SW_CORNER at (1,0), got {MetalTile(tiles[1, 0]).name}"
+        )
+        # FLOOR at (0,1) should remain unchanged (no conflicting CONVEX_SW)
+        assert tiles[0, 1] == MetalTile.FLOOR, (
+            f"Expected FLOOR at (0,1) unchanged, got {MetalTile(tiles[0, 1]).name}"
+        )
+
+    def test_se_corner_placed_between_south_and_east_walls(self):
+        """
+        Test that SE_CORNER is placed where south wall meets east wall.
+
+        SE_CORNER is the southeast corner of a room:
+        - SOUTH_WALL to its west (left)
+        - EAST_WALL to its north (above)
+
+                col0  col1
+        row0:   ?     ]     (] = EAST_WALL going south)
+        row1:   _     ?     (_ = SOUTH_WALL going east, ? = SE_CORNER)
+
+        After: SE_CORNER at (1,1) connecting the walls.
+        """
+        tiles = np.array(
+            [
+                [MetalTile.FLOOR, MetalTile.EAST_WALL],
+                [MetalTile.SOUTH_WALL, MetalTile.FLOOR],
+            ],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # SE_CORNER should be placed at (1,1)
+        assert tiles[1, 1] == MetalTile.SE_CORNER, (
+            f"Expected SE_CORNER at (1,1), got {MetalTile(tiles[1, 1]).name}"
+        )
