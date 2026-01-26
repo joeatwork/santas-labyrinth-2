@@ -4,7 +4,6 @@ from typing import Dict, List, Tuple
 
 from .sprite import Sprite
 
-
 class MetalTile(IntEnum):
     """
     Tile types for the metal labyrinth tile set.
