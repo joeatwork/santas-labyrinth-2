@@ -228,6 +228,11 @@ def _would_overlap(
     return False
 
 
+# TODO: this needs to be updated to handle
+# metal_labyrinth_sprite doors, which have more complex
+# rules.
+# - Doors replaced with walls should replace adjacent convex corners with walls
+# - North doors should replace flooring to the south with NORTH_WALL_BASE tiles
 def _replace_blind_doors_with_walls(
     dungeon_map: np.ndarray,
     room_positions: Dict[int, Position],
@@ -255,6 +260,11 @@ def _replace_blind_doors_with_walls(
     # For each room, check its doors
     for room_id, room_position in room_positions.items():
         template = room_assignments[room_id]
+
+        # TODO: New algorithm
+        # - Scan template for DOOR tiles
+        # 
+
 
         # Check each direction
         for direction in [
@@ -491,6 +501,10 @@ def generate_dungeon(
             # We can't find a template that'll work for this door.
             # give up.
             continue
+
+        # TODO: rather than record doors as room_id, direction
+        # let's record the doors with their north-westernmost
+        # tile. That way, a room can have multiple north doors.
 
         # Mark the source door as connected
         connected_doors.add((source_room_id, direction))
