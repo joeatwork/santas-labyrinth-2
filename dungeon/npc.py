@@ -83,13 +83,13 @@ class NPC:
         if self.sprite_name not in SPRITE_OFFSETS:
             raise KeyError(f"Sprite '{self.sprite_name}' not found in SPRITE_OFFSETS")
 
-        cfg = SPRITE_OFFSETS[self.sprite_name]
-        self.sprite_width = cfg["w"]
-        self.sprite_height = cfg["h"]
-        self.base_width = cfg.get("base_width", 64)
-        self.base_height = cfg.get("base_height", 64)
-        self.sprite_offset_x = cfg.get("offset_x", 0)
-        self.sprite_offset_y = cfg.get("offset_y", 0)
+        sprite = SPRITE_OFFSETS[self.sprite_name]
+        self.sprite_width = sprite.width
+        self.sprite_height = sprite.height
+        self.base_width = sprite.base_width if sprite.base_width is not None else 64
+        self.base_height = sprite.base_height if sprite.base_height is not None else 64
+        self.sprite_offset_x = sprite.offset_x
+        self.sprite_offset_y = sprite.offset_y
 
     @property
     def tile_col(self) -> int:

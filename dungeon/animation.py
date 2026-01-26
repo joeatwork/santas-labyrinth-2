@@ -5,9 +5,9 @@ import numpy as np
 from PIL import ImageFont
 from dataclasses import dataclass
 from dungeon.dungeon_gen import Tile, DungeonMap, generate_foreground_from_dungeon
+from dungeon.sprite import Sprite
 from typing import (
     Dict,
-    Any,
     List,
     Optional,
     Tuple,
@@ -51,394 +51,202 @@ TILE_SIZE: int = 64
 
 # Sprite offsets from death_mountain_paradigm_room.png
 # and spaceman_overworld_64x64.png
-SPRITE_OFFSETS: Dict[str, Dict[str, Any]] = {
+SPRITE_OFFSETS: Dict[str, Sprite] = {
     # Walls (death_mountain)
-    "wall_nw_corner": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_ne_corner": {
-        "x": 576,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_sw_corner": {
-        "x": 0,
-        "y": 576,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_se_corner": {
-        "x": 576,
-        "y": 576,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_north": {
-        "x": 64,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_south": {
-        "x": 64,
-        "y": 576,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_west": {
-        "x": 0,
-        "y": 64,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "wall_east": {
-        "x": 576,
-        "y": 64,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "wall_nw_corner": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=0, y=0
+    ),
+    "wall_ne_corner": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=576, y=0
+    ),
+    "wall_sw_corner": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=0, y=576
+    ),
+    "wall_se_corner": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=576, y=576
+    ),
+    "wall_north": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=64, y=0
+    ),
+    "wall_south": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=64, y=576
+    ),
+    "wall_west": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=0, y=64
+    ),
+    "wall_east": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=576, y=64
+    ),
     # Floor (death_mountain)
-    "floor": {
-        "x": 64,
-        "y": 64,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "floor": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=64, y=64
+    ),
     # Door flooring
-    "north_door_floor": {
-        "x": 192,
-        "y": 640,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "south_door_floor": {
-        "x": 128,
-        "y": 640,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "west_door_floor": {
-        "x": 640,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "east_door_floor": {
-        "x": 640,
-        "y": 192,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "north_door_floor": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=192, y=640
+    ),
+    "south_door_floor": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=128, y=640
+    ),
+    "west_door_floor": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=640, y=128
+    ),
+    "east_door_floor": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=640, y=192
+    ),
     # Pillar
-    "pillar": {
-        "x": 0,
-        "y": 704,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "pillar": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=0, y=704
+    ),
     # Convex corners (inner corners for room intersections)
-    "convex_nw": {
-        "x": 128,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "convex_ne": {
-        "x": 256,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "convex_sw": {
-        "x": 128,
-        "y": 256,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "convex_se": {
-        "x": 256,
-        "y": 256,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "convex_nw": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=128, y=128
+    ),
+    "convex_ne": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=256, y=128
+    ),
+    "convex_sw": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=128, y=256
+    ),
+    "convex_se": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=256, y=256
+    ),
     # Decorative north walls (variety of north wall styles)
-    "decorative_north_wall_0": {
-        "x": 64,
-        "y": 768,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "decorative_north_wall_1": {
-        "x": 128,
-        "y": 768,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "decorative_north_wall_2": {
-        "x": 192,
-        "y": 768,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "decorative_north_wall_3": {
-        "x": 256,
-        "y": 768,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "decorative_north_wall_4": {
-        "x": 64,
-        "y": 832,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "decorative_north_wall_0": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=64, y=768
+    ),
+    "decorative_north_wall_1": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=128, y=768
+    ),
+    "decorative_north_wall_2": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=192, y=768
+    ),
+    "decorative_north_wall_3": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=256, y=768
+    ),
+    "decorative_north_wall_4": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=64, y=832
+    ),
     # Goal
-    "goal": {"x": 0, "y": 0, "w": 64, "h": 64, "file": "sprites/red_heart.png"},
+    "goal": Sprite(file="sprites/red_heart.png", x=0, y=0),
     # Doorframes (foreground arches - death_mountain)
     # North doorframes (drawn over north doors)
-    "doorframe_north_west": {
-        "x": 256,
-        "y": 640,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "doorframe_north_east": {
-        "x": 320,
-        "y": 640,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "doorframe_north_west": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=256, y=640
+    ),
+    "doorframe_north_east": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=320, y=640
+    ),
     # South doorframes (drawn over south doors)
-    "doorframe_south_west": {
-        "x": 0,
-        "y": 640,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "doorframe_south_east": {
-        "x": 64,
-        "y": 640,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "doorframe_south_west": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=0, y=640
+    ),
+    "doorframe_south_east": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=64, y=640
+    ),
     # West doorframes (drawn over west doors)
-    "doorframe_west_north": {
-        "x": 640,
-        "y": 256,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "doorframe_west_south": {
-        "x": 640,
-        "y": 320,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "doorframe_west_north": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=640, y=256
+    ),
+    "doorframe_west_south": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=640, y=320
+    ),
     # East doorframes (drawn over east doors)
-    "doorframe_east_north": {
-        "x": 640,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
-    "doorframe_east_south": {
-        "x": 640,
-        "y": 64,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/death_mountain_paradigm_room.png",
-    },
+    "doorframe_east_north": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=640, y=0
+    ),
+    "doorframe_east_south": Sprite(
+        file="sprites/death_mountain_paradigm_room.png", x=640, y=64
+    ),
     # Hero Walk Cycles (spaceman)
     # South
-    "hero_south_0": {
-        "x": 192,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "hero_south_1": {
-        "x": 256,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "hero_south_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=192, y=0
+    ),
+    "hero_south_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=256, y=0
+    ),
     # North
-    "hero_north_0": {
-        "x": 320,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "hero_north_1": {
-        "x": 384,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "hero_north_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=320, y=0
+    ),
+    "hero_north_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=384, y=0
+    ),
     # West
-    "hero_west_0": {
-        "x": 448,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "hero_west_1": {
-        "x": 512,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "hero_west_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=448, y=0
+    ),
+    "hero_west_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=512, y=0
+    ),
     # East
-    "hero_east_0": {
-        "x": 576,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "hero_east_1": {
-        "x": 640,
-        "y": 0,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "hero_east_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=576, y=0
+    ),
+    "hero_east_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=640, y=0
+    ),
     # NPC sprites and walk cycles
-    "npc_default": {
-        "x": 0,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "npc_default": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=0, y=128
+    ),
     # South
-    "npc_south_0": {
-        "x": 192,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "npc_south_1": {
-        "x": 256,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "npc_south_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=192, y=128
+    ),
+    "npc_south_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=256, y=128
+    ),
     # North
-    "npc_north_0": {
-        "x": 320,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "npc_north_1": {
-        "x": 384,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "npc_north_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=320, y=128
+    ),
+    "npc_north_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=384, y=128
+    ),
     # West
-    "npc_west_0": {
-        "x": 448,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "npc_west_1": {
-        "x": 512,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "npc_west_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=448, y=128
+    ),
+    "npc_west_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=512, y=128
+    ),
     # East
-    "npc_east_0": {
-        "x": 576,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
-    "npc_east_1": {
-        "x": 640,
-        "y": 128,
-        "w": 64,
-        "h": 64,
-        "file": "sprites/spaceman_overworld_64x64.png",
-    },
+    "npc_east_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=576, y=128
+    ),
+    "npc_east_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=640, y=128
+    ),
     # OLD Robot priest (large NPC: 128x192, logical base is bottom 128x64 = 2 tiles)
-    "robot_priest": {
-        "x": 0,
-        "y": 0,
-        "w": 128,
-        "h": 192,
-        "file": "sprites/npcs_01.png",
-        "base_width": 128,
-    },
+    "robot_priest": Sprite(
+        file="sprites/npcs_01.png",
+        x=0,
+        y=0,
+        width=128,
+        height=192,
+        base_width=128,
+    ),
     # NEW Robot priest (large NPC with weird dimensions, with a weird negative offset)
-    "indora_god": {
-        "x": 128,
-        "y": 0,
-        "w": 154,
-        "h": 282,
-        "file": "sprites/npcs_01.png",
-        "base_width": 128,
-        "offset_x": -10,
-        "offset_y": -32,
-    },
+    "indora_god": Sprite(
+        file="sprites/npcs_01.png",
+        x=128,
+        y=0,
+        width=154,
+        height=282,
+        base_width=128,
+        offset_x=-10,
+        offset_y=-32,
+    ),
     # Portraits for conversation overlay
-    "robot_priest_portrait": {
-        "x": 0,
-        "y": 0,
-        "w": 256,
-        "h": 256,
-        "file": "portraits/npc_portraits_01.png",
-    },
+    "robot_priest_portrait": Sprite(
+        file="portraits/npc_portraits_01.png",
+        x=0,
+        y=0,
+        width=256,
+        height=256,
+    ),
 }
 
 # Static lookup for hero sprites: [direction][frame]
@@ -513,7 +321,7 @@ class AssetManager:
         self.fonts["small"] = ImageFont.truetype(path, self.font_sizes["small"])
 
     def load_images(self) -> None:
-        unique_files = set(cfg["file"] for cfg in SPRITE_OFFSETS.values())
+        unique_files = set(sprite.file for sprite in SPRITE_OFFSETS.values())
         for rel_path in unique_files:
             path = os.path.join("assets", rel_path)
             if not os.path.exists(path):
@@ -528,13 +336,10 @@ class AssetManager:
         if name in self.sprites:
             return self.sprites[name]
 
-        cfg = SPRITE_OFFSETS[
-            name
-        ]  # Adjusted to match user's non-safe access edit expectation
+        cfg = SPRITE_OFFSETS[name]
 
-        src_img = self.images[cfg["file"]]
-        x, y, w, h = int(cfg["x"]), int(cfg["y"]), int(cfg["w"]), int(cfg["h"])
-        sprite = src_img[y : y + h, x : x + w]
+        src_img = self.images[cfg.file]
+        sprite = src_img[cfg.y : cfg.y + cfg.height, cfg.x : cfg.x + cfg.width]
         self.sprites[name] = sprite
         return sprite
 
