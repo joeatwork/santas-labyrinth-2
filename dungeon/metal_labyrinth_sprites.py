@@ -1003,36 +1003,38 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
         replace=[(1, 0, MetalTile.CONVEX_NW)],
     ),
     # Ensure well formed doors
+    # North/South doors are horizontally adjacent: WEST half at (0,0), EAST half at (0,1)
     TilePattern(
-        match=[(0, 0, _Y(MetalTile.NORTH_DOOR_WEST)), (1, 0, _N(MetalTile.NORTH_DOOR_EAST))],
-        replace=[(1, 0, MetalTile.NORTH_DOOR_EAST)],
+        match=[(0, 0, _Y(MetalTile.NORTH_DOOR_WEST)), (0, 1, _N(MetalTile.NORTH_DOOR_EAST))],
+        replace=[(0, 1, MetalTile.NORTH_DOOR_EAST)],
     ),
     TilePattern(
-        match=[(0, 0, _N(MetalTile.NORTH_DOOR_WEST)), (1, 0, _Y(MetalTile.NORTH_DOOR_EAST))],
+        match=[(0, 0, _N(MetalTile.NORTH_DOOR_WEST)), (0, 1, _Y(MetalTile.NORTH_DOOR_EAST))],
         replace=[(0, 0, MetalTile.NORTH_DOOR_WEST)],
     ),
     TilePattern(
-        match=[(0, 0, _Y(MetalTile.SOUTH_DOOR_WEST)), (1, 0, _N(MetalTile.SOUTH_DOOR_EAST))],
-        replace=[(1, 0, MetalTile.SOUTH_DOOR_EAST)],
+        match=[(0, 0, _Y(MetalTile.SOUTH_DOOR_WEST)), (0, 1, _N(MetalTile.SOUTH_DOOR_EAST))],
+        replace=[(0, 1, MetalTile.SOUTH_DOOR_EAST)],
     ),
     TilePattern(
-        match=[(0, 0, _N(MetalTile.SOUTH_DOOR_WEST)), (1, 0, _Y(MetalTile.SOUTH_DOOR_EAST))],
+        match=[(0, 0, _N(MetalTile.SOUTH_DOOR_WEST)), (0, 1, _Y(MetalTile.SOUTH_DOOR_EAST))],
         replace=[(0, 0, MetalTile.SOUTH_DOOR_WEST)],
     ),
+    # West/East doors are vertically adjacent: NORTH half at (0,0), SOUTH half at (1,0)
     TilePattern(
-        match=[(0, 0, _Y(MetalTile.WEST_DOOR_NORTH)), (0, 1, _N(MetalTile.WEST_DOOR_SOUTH))],
-        replace=[(0, 1, MetalTile.WEST_DOOR_SOUTH)],
+        match=[(0, 0, _Y(MetalTile.WEST_DOOR_NORTH)), (1, 0, _N(MetalTile.WEST_DOOR_SOUTH))],
+        replace=[(1, 0, MetalTile.WEST_DOOR_SOUTH)],
     ),
     TilePattern(
-        match=[(0, 0, _N(MetalTile.WEST_DOOR_NORTH)), (0, 1, _Y(MetalTile.WEST_DOOR_SOUTH))],
+        match=[(0, 0, _N(MetalTile.WEST_DOOR_NORTH)), (1, 0, _Y(MetalTile.WEST_DOOR_SOUTH))],
         replace=[(0, 0, MetalTile.WEST_DOOR_NORTH)],
     ),
     TilePattern(
-        match=[(0, 0, _Y(MetalTile.EAST_DOOR_NORTH)), (0, 1, _N(MetalTile.EAST_DOOR_SOUTH))],
-        replace=[(0, 1, MetalTile.EAST_DOOR_SOUTH)],
+        match=[(0, 0, _Y(MetalTile.EAST_DOOR_NORTH)), (1, 0, _N(MetalTile.EAST_DOOR_SOUTH))],
+        replace=[(1, 0, MetalTile.EAST_DOOR_SOUTH)],
     ),
     TilePattern(
-        match=[(0, 0, _N(MetalTile.EAST_DOOR_NORTH)), (0, 1, _Y(MetalTile.EAST_DOOR_SOUTH))],
+        match=[(0, 0, _N(MetalTile.EAST_DOOR_NORTH)), (1, 0, _Y(MetalTile.EAST_DOOR_SOUTH))],
         replace=[(0, 0, MetalTile.EAST_DOOR_NORTH)],
     ),
 

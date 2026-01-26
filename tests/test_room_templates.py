@@ -270,3 +270,60 @@ class TestTilePatterns:
             f"Expected EAST_WALL at (1,0), got {MetalTile(tiles[1, 0]).name}"
         )
         assert replacements > 0, "Expected at least one replacement"
+
+    def test_north_door_halves_are_horizontally_adjacent(self):
+        """
+        Test that north door patterns look for halves side-by-side (same row).
+
+        A north door consists of NORTH_DOOR_WEST and NORTH_DOOR_EAST
+        which are horizontally adjacent (west half on left, east half on right).
+
+        Before:           After:
+        n .  (nN pair)    n N
+        col0 col1         col0 col1
+
+        Where n=NORTH_DOOR_WEST, N=NORTH_DOOR_EAST, .=FLOOR
+        """
+        # Create a 1x2 tile array: NORTH_DOOR_WEST at (0,0), FLOOR at (0,1)
+        tiles = np.array(
+            [[MetalTile.NORTH_DOOR_WEST, MetalTile.FLOOR]],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # The pattern should add NORTH_DOOR_EAST to the right of NORTH_DOOR_WEST
+        assert tiles[0, 1] == MetalTile.NORTH_DOOR_EAST, (
+            f"Expected NORTH_DOOR_EAST at (0,1), got {MetalTile(tiles[0, 1]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
+
+    def test_west_door_halves_are_vertically_adjacent(self):
+        """
+        Test that west door patterns look for halves stacked (same column).
+
+        A west door consists of WEST_DOOR_NORTH and WEST_DOOR_SOUTH
+        which are vertically adjacent (north half on top, south half below).
+
+        Before:       After:
+        w  (row 0)    w
+        .  (row 1)    W
+
+        Where w=WEST_DOOR_NORTH, W=WEST_DOOR_SOUTH, .=FLOOR
+        """
+        # Create a 2x1 tile array: WEST_DOOR_NORTH at (0,0), FLOOR at (1,0)
+        tiles = np.array(
+            [
+                [MetalTile.WEST_DOOR_NORTH],
+                [MetalTile.FLOOR],
+            ],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # The pattern should add WEST_DOOR_SOUTH below WEST_DOOR_NORTH
+        assert tiles[1, 0] == MetalTile.WEST_DOOR_SOUTH, (
+            f"Expected WEST_DOOR_SOUTH at (1,0), got {MetalTile(tiles[1, 0]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
