@@ -552,11 +552,12 @@ def generate_dungeon(
         dungeon_map, room_positions, room_assignments, connected_doors
     )
 
-    # Fix tiling to satisfy adjacency rules (e.g., add base tiles, fix convex corners)
-    fix_tiling_to_valid(dungeon_map)
-
     # Crop the dungeon map to the actual used area
     dungeon_map, crop_offset = _crop_dungeon_map(dungeon_map)
+
+    # Fix tiling to satisfy adjacency rules (e.g., add base tiles, fix convex corners)
+    # This is done after cropping to avoid processing the huge initial canvas
+    fix_tiling_to_valid(dungeon_map)
 
     # Adjust all room positions by the crop offset
     room_positions_adjusted: Dict[int, Position] = {}

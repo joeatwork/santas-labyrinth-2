@@ -511,6 +511,133 @@ def check_valid_tiling(tiles: np.ndarray) -> List[ParseError]:
                         )
                     )
 
+    # Check wall adjacency requirements
+    # Walls need walkable tiles on the interior side (facing into the room)
+    # and non-walkable tiles on adjacent sides (forming a continuous wall)
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            # NORTH_WALL: walkable to south (interior), non-walkable to east and west
+            if tile == MetalTile.NORTH_WALL:
+                tile_south = get_tile(row_idx + 1, col_idx)
+                tile_east = get_tile(row_idx, col_idx + 1)
+                tile_west = get_tile(row_idx, col_idx - 1)
+                if tile_south not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_WALL requires walkable tile to south, but found {tile_south.name}",
+                        )
+                    )
+                if tile_east in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_WALL requires non-walkable tile to east, but found {tile_east.name}",
+                        )
+                    )
+                if tile_west in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_WALL requires non-walkable tile to west, but found {tile_west.name}",
+                        )
+                    )
+
+            # SOUTH_WALL: walkable to north (interior), non-walkable to east and west
+            elif tile == MetalTile.SOUTH_WALL:
+                tile_north = get_tile(row_idx - 1, col_idx)
+                tile_east = get_tile(row_idx, col_idx + 1)
+                tile_west = get_tile(row_idx, col_idx - 1)
+                if tile_north not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_WALL requires walkable tile to north, but found {tile_north.name}",
+                        )
+                    )
+                if tile_east in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_WALL requires non-walkable tile to east, but found {tile_east.name}",
+                        )
+                    )
+                if tile_west in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_WALL requires non-walkable tile to west, but found {tile_west.name}",
+                        )
+                    )
+
+            # EAST_WALL: walkable to west (interior), non-walkable to north and south
+            elif tile == MetalTile.EAST_WALL:
+                tile_west = get_tile(row_idx, col_idx - 1)
+                tile_north = get_tile(row_idx - 1, col_idx)
+                tile_south = get_tile(row_idx + 1, col_idx)
+                if tile_west not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_WALL requires walkable tile to west, but found {tile_west.name}",
+                        )
+                    )
+                if tile_north in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_WALL requires non-walkable tile to north, but found {tile_north.name}",
+                        )
+                    )
+                if tile_south in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_WALL requires non-walkable tile to south, but found {tile_south.name}",
+                        )
+                    )
+
+            # WEST_WALL: walkable to east (interior), non-walkable to north and south
+            elif tile == MetalTile.WEST_WALL:
+                tile_east = get_tile(row_idx, col_idx + 1)
+                tile_north = get_tile(row_idx - 1, col_idx)
+                tile_south = get_tile(row_idx + 1, col_idx)
+                if tile_east not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_WALL requires walkable tile to east, but found {tile_east.name}",
+                        )
+                    )
+                if tile_north in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_WALL requires non-walkable tile to north, but found {tile_north.name}",
+                        )
+                    )
+                if tile_south in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_WALL requires non-walkable tile to south, but found {tile_south.name}",
+                        )
+                    )
+
     return errors
 
 
@@ -624,8 +751,12 @@ def fix_tiling_to_valid(tiles: np.ndarray) -> None:
     # Third pass: replace invalid convex corners with straight walls
     # We need to iterate until no more changes are made because
     # replacing a convex corner might affect adjacent tiles
+    # Limit iterations to prevent infinite loops
+    max_iterations = 100
+    iteration = 0
     changed = True
-    while changed:
+    while changed and iteration < max_iterations:
+        iteration += 1
         changed = False
         for row_idx in range(height):
             for col_idx in range(width):
