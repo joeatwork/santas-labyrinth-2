@@ -22,95 +22,22 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Tuple, List, Dict, Set, Optional, TYPE_CHECKING
 
+from .metal_labyrinth_sprites import (
+    MetalTile,
+    METAL_ASCII_TO_TILE,
+    METAL_ROOM_TEMPLATES,
+    MetalRoomTemplate,
+)
+
 if TYPE_CHECKING:
     from .world import Dungeon
 
 
-# Tile Constants (Matching animation.py expectations or defining new ones)
-# TODO: Tile mixes logical, map tiles (like NORTH_DOOR_WEST) with rendeing
-# implementation details like NORTH_DOORFRAME_WEST. These should be distinct
-# types (and dungeon generation shouldn't know that foregrounds and backgrounds exist.)
-class Tile:
-    NOTHING: int = 0
-    FLOOR: int = 1
-    NORTH_WALL: int = 10
-    SOUTH_WALL: int = 11
-    WEST_WALL: int = 12
-    EAST_WALL: int = 13
-    NW_CORNER: int = 14
-    NE_CORNER: int = 15
-    SW_CORNER: int = 16
-    SE_CORNER: int = 17
+# Alias MetalTile as Tile for backward compatibility with existing code
+Tile = MetalTile
 
-    PILLAR: int = 50
-    NW_CONVEX_CORNER: int = 51
-    NE_CONVEX_CORNER: int = 52
-    SW_CONVEX_CORNER: int = 53
-    SE_CONVEX_CORNER: int = 54
-
-    DECORATIVE_NORTH_WALL_0: int = 60
-    DECORATIVE_NORTH_WALL_1: int = 61
-    DECORATIVE_NORTH_WALL_2: int = 62
-    DECORATIVE_NORTH_WALL_3: int = 63
-
-    # Doors (each direction has two tiles - west/east or north/south halves)
-    NORTH_DOOR_WEST: int = 20
-    NORTH_DOOR_EAST: int = 21
-    SOUTH_DOOR_WEST: int = 22
-    SOUTH_DOOR_EAST: int = 23
-    WEST_DOOR_NORTH: int = 24
-    WEST_DOOR_SOUTH: int = 25
-    EAST_DOOR_NORTH: int = 26
-    EAST_DOOR_SOUTH: int = 27
-
-    # Goal
-    GOAL: int = 30
-
-    # Doorframes (foreground tiles)
-    NORTH_DOORFRAME_WEST: int = 40
-    NORTH_DOORFRAME_EAST: int = 41
-    SOUTH_DOORFRAME_WEST: int = 42
-    SOUTH_DOORFRAME_EAST: int = 43
-    WEST_DOORFRAME_NORTH: int = 44
-    WEST_DOORFRAME_SOUTH: int = 45
-    EAST_DOORFRAME_NORTH: int = 46
-    EAST_DOORFRAME_SOUTH: int = 47
-
-
-# Room size in tiles (from references)
-ROOM_WIDTH: int = 12
-ROOM_HEIGHT: int = 10
-
-# ASCII character to tile mapping
-ASCII_TO_TILE: Dict[str, int] = {
-    " ": Tile.NOTHING,
-    ".": Tile.FLOOR,
-    "-": Tile.NORTH_WALL,
-    "_": Tile.SOUTH_WALL,
-    "[": Tile.WEST_WALL,
-    "]": Tile.EAST_WALL,
-    "=": Tile.DECORATIVE_NORTH_WALL_0,
-    "#": Tile.DECORATIVE_NORTH_WALL_1,
-    "+": Tile.DECORATIVE_NORTH_WALL_2,
-    "*": Tile.DECORATIVE_NORTH_WALL_3,
-    "1": Tile.NW_CORNER,
-    "2": Tile.NE_CORNER,
-    "3": Tile.SW_CORNER,
-    "4": Tile.SE_CORNER,
-    "P": Tile.PILLAR,
-    "^": Tile.NW_CONVEX_CORNER,
-    "!": Tile.NE_CONVEX_CORNER,
-    "~": Tile.SW_CONVEX_CORNER,
-    ",": Tile.SE_CONVEX_CORNER,
-    "n": Tile.NORTH_DOOR_WEST,
-    "N": Tile.NORTH_DOOR_EAST,
-    "s": Tile.SOUTH_DOOR_WEST,
-    "S": Tile.SOUTH_DOOR_EAST,
-    "w": Tile.WEST_DOOR_NORTH,
-    "W": Tile.WEST_DOOR_SOUTH,
-    "e": Tile.EAST_DOOR_NORTH,
-    "E": Tile.EAST_DOOR_SOUTH,
-}
+# Use metal labyrinth ASCII mapping
+ASCII_TO_TILE = METAL_ASCII_TO_TILE
 
 # Door slot characters (converted to door tiles or walls based on required connections)
 DOOR_SLOT_CHARS = {"n", "N", "s", "S", "w", "W", "e", "E"}
@@ -153,209 +80,32 @@ class Direction(Enum):
         return steps[self]
 
 
-@dataclass
-class RoomTemplate:
-    """Defines a room shape using ASCII art."""
-
-    name: str
-    ascii_art: List[str]
-
-    @property
-    def width(self) -> int:
-        return max(len(line) for line in self.ascii_art) if self.ascii_art else 0
-
-    @property
-    def height(self) -> int:
-        return len(self.ascii_art)
-
-    @property
-    def has_north_door(self) -> bool:
-        return any("n" in line or "N" in line for line in self.ascii_art)
-
-    @property
-    def has_south_door(self) -> bool:
-        return any("s" in line or "S" in line for line in self.ascii_art)
-
-    @property
-    def has_east_door(self) -> bool:
-        return any("e" in line or "E" in line for line in self.ascii_art)
-
-    @property
-    def has_west_door(self) -> bool:
-        return any("w" in line or "W" in line for line in self.ascii_art)
-
-    def has_door(self, direction: Direction) -> bool:
-        """Check if this template has a door in the given direction."""
-        door_checks = {
-            Direction.NORTH: self.has_north_door,
-            Direction.SOUTH: self.has_south_door,
-            Direction.EAST: self.has_east_door,
-            Direction.WEST: self.has_west_door,
-        }
-        return door_checks[direction]
-
-    def has_matching_door(self, direction: Direction) -> bool:
-        """Check if this template has a door that can connect to the given direction.
-
-        For example, if direction is NORTH (an existing room's north door),
-        this returns True if this template has a SOUTH door to connect to it.
-        """
-        return self.has_door(direction.opposite())
+# Alias MetalRoomTemplate as RoomTemplate for backward compatibility
+RoomTemplate = MetalRoomTemplate
 
 
-# Pre-defined room templates
-ROOM_TEMPLATES: List[RoomTemplate] = [
-    RoomTemplate(
-        name="large",
-        ascii_art=[
-            "1----nN----2",
-            "[..........]",
-            "[..........]",
-            "[..........]",
-            "w..........e",
-            "W..........E",
-            "[..........]",
-            "[..........]",
-            "[..........]",
-            "3____sS____4",
-        ],
-    ),
-    RoomTemplate(
-        name="medium",
-        ascii_art=[
-            "1--nN--2",
-            "[......]",
-            "[.P....]",
-            "w......e",
-            "W......E",
-            "[....P.]",
-            "[......]",
-            "3__sS__4",
-        ],
-    ),
-    RoomTemplate(
-        name="wide",
-        ascii_art=[
-            "1-----nN-----2",
-            "[............]",
-            "w............e",
-            "W............E",
-            "[............]",
-            "3_____sS_____4",
-        ],
-    ),
-    RoomTemplate(
-        name="big-pillar",
-        ascii_art=[
-            "1-----nN-----2",
-            "[............]",
-            "w.....^!.....e",
-            "W.....~,.....E",
-            "[............]",
-            "3_____sS_____4",
-        ],
-    ),
-    RoomTemplate(
-        name="donut",
-        ascii_art=[
-            "1-----nN-----2",
-            "[............]",
-            "[............]",
-            "[....^__!....]",
-            "w....]  [....e",
-            "W....]  [....E",
-            "[....~--,....]",
-            "[............]",
-            "[............]",
-            "3_____sS_____4",
-        ],
-    ),
-    RoomTemplate(
-        name="small-pillars",
-        ascii_art=[
-            "1----nN----2",
-            "[..........]",
-            "[...P..P...]",
-            "[..........]",
-            "w..........e",
-            "W..........E",
-            "[..........]",
-            "[...P..P...]",
-            "[..........]",
-            "3____sS____4",
-        ],
-    ),
-    RoomTemplate(
-        name="east-west",
-        ascii_art=[
-            "1---*---2",
-            "w.......e",
-            "W.......E",
-            "3_______4",
-        ],
-    ),
-    RoomTemplate(
-        name="long-east-west",
-        ascii_art=[
-            "1---*------------*---2",
-            "w....................e",
-            "W....................E",
-            "3____________________4",
-        ],
-    ),
-    RoomTemplate(
-        name="north-south",
-        ascii_art=[
-            "1nN2",
-            "[..]",
-            "[..]",
-            "[..]",
-            "[..]",
-            "[..]",
-            "[..]",
-            "3sS4",
-        ],
-    ),
-    RoomTemplate(
-        name="diamond",
-        ascii_art=[
-            "  1-nN-2  ",
-            " 1,....~2 ",
-            "1,......~2",
-            "w........e",
-            "W........E",
-            "3!......^4",
-            " 3!....^4 ",
-            "  3_sS_4  ",
-        ]
-    ),
-    RoomTemplate(
-        name="big-el",
-        ascii_art=[
-            "1-nN-2",
-            "[....]",
-            "[....]",
-            "[....]",
-            "[....~------2",
-            "[...........e",
-            "[...........E",
-            "3___________4",
-        ],
-    ),
-    RoomTemplate(
-        name="big-jay",
-        ascii_art=[
-            "       1-nN-2",
-            "       [....]",
-            "       [....]",
-            "       [....]",
-            "1------,....]",
-            "w...........]",
-            "W...........]",
-            "3___________4",
-        ],
-    ) 
-]
+def _has_door(template: RoomTemplate, direction: "Direction") -> bool:
+    """Check if this template has a door in the given direction."""
+    door_checks = {
+        Direction.NORTH: template.has_north_door,
+        Direction.SOUTH: template.has_south_door,
+        Direction.EAST: template.has_east_door,
+        Direction.WEST: template.has_west_door,
+    }
+    return door_checks[direction]
+
+
+def _has_matching_door(template: RoomTemplate, direction: "Direction") -> bool:
+    """Check if this template has a door that can connect to the given direction.
+
+    For example, if direction is NORTH (an existing room's north door),
+    this returns True if this template has a SOUTH door to connect to it.
+    """
+    return _has_door(template, direction.opposite())
+
+
+# Use metal labyrinth room templates
+ROOM_TEMPLATES = METAL_ROOM_TEMPLATES
 
 
 def _parse_ascii_room(
@@ -410,35 +160,15 @@ def _get_door_position(
 DungeonMap = np.ndarray
 
 
-# TODO: this shouldn't be in this file, foregrounds should
-# be calculated by the renderer.
 def generate_foreground_from_dungeon(dungeon_map: DungeonMap) -> DungeonMap:
     """
-    Generates a foreground map from an existing dungeon map by detecting door tiles
-    and placing corresponding doorframe arch tiles above them.
+    Generates a foreground map from an existing dungeon map.
+
+    Metal labyrinth tileset does not use doorframe foregrounds,
+    so this returns an empty map.
     """
     rows, cols = dungeon_map.shape
-    foreground: DungeonMap = np.zeros((rows, cols), dtype=int)
-
-    # Direct mapping from door tile to doorframe tile
-    door_to_doorframe = {
-        Tile.NORTH_DOOR_WEST: Tile.NORTH_DOORFRAME_WEST,
-        Tile.NORTH_DOOR_EAST: Tile.NORTH_DOORFRAME_EAST,
-        Tile.SOUTH_DOOR_WEST: Tile.SOUTH_DOORFRAME_WEST,
-        Tile.SOUTH_DOOR_EAST: Tile.SOUTH_DOORFRAME_EAST,
-        Tile.WEST_DOOR_NORTH: Tile.WEST_DOORFRAME_NORTH,
-        Tile.WEST_DOOR_SOUTH: Tile.WEST_DOORFRAME_SOUTH,
-        Tile.EAST_DOOR_NORTH: Tile.EAST_DOORFRAME_NORTH,
-        Tile.EAST_DOOR_SOUTH: Tile.EAST_DOORFRAME_SOUTH,
-    }
-
-    for r in range(rows):
-        for c in range(cols):
-            tile = dungeon_map[r, c]
-            if tile in door_to_doorframe:
-                foreground[r, c] = door_to_doorframe[tile]
-
-    return foreground
+    return np.zeros((rows, cols), dtype=int)
 
 
 def _place_room_on_canvas(
@@ -538,7 +268,7 @@ def _replace_blind_doors_with_walls(
                 continue
 
             # Skip if template doesn't have this door
-            if not template.has_door(direction):
+            if not _has_door(template, direction):
                 continue
 
             # Get door position in template
@@ -560,14 +290,6 @@ def _replace_blind_doors_with_walls(
                         dungeon_map[door_row, door_col + col_offset] = door_to_wall[
                             tile
                         ]
-
-                    # A little extra potential spice if it's a north wall
-                    if tile == Tile.NORTH_DOOR_WEST:
-                        dungeon_map[door_row, door_col + col_offset] = random.choice([
-                            Tile.DECORATIVE_NORTH_WALL_0,
-                            Tile.DECORATIVE_NORTH_WALL_1,
-                            Tile.DECORATIVE_NORTH_WALL_2,
-                        ])
             else:
                 # East/West doors are two tiles tall
                 for row_offset in range(2):
@@ -744,7 +466,7 @@ def generate_dungeon(
 
         # Pick a random room template that has the corresponding door
         matching_templates = [
-            room for room in ROOM_TEMPLATES if room.has_matching_door(direction)
+            room for room in ROOM_TEMPLATES if _has_matching_door(room, direction)
         ]
         if not matching_templates:
             break

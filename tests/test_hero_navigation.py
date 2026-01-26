@@ -4,7 +4,11 @@ import pytest
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 
-from dungeon.dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
+from dungeon.dungeon_gen import Tile
+
+# Default room dimensions for testing (matches the "large" template)
+ROOM_WIDTH = 12
+ROOM_HEIGHT = 10
 from dungeon.world import Hero, Dungeon, TILE_SIZE
 from dungeon.strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
 from dungeon.npc import NPC

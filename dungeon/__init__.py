@@ -6,8 +6,6 @@ from dungeon.dungeon_gen import (
     RoomTemplate,
     Position,
     Direction,
-    ROOM_WIDTH,
-    ROOM_HEIGHT,
     ASCII_TO_TILE,
     generate_dungeon,
     generate_foreground_from_dungeon,

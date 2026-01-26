@@ -3,7 +3,7 @@
 import pytest
 from typing import Tuple, Optional
 
-from dungeon.dungeon_gen import Tile, ROOM_WIDTH, ROOM_HEIGHT
+from dungeon.dungeon_gen import Tile
 from dungeon.world import Hero, TILE_SIZE
 from dungeon.strategy import GoalSeekingStrategy, MoveCommand, InteractCommand
 from dungeon.npc import NPC

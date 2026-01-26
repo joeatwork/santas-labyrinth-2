@@ -1,5 +1,6 @@
 import math
 from .dungeon_gen import Tile, DungeonMap, RoomTemplate
+from .metal_labyrinth_sprites import WALKABLE_TILES as METAL_WALKABLE_TILES
 from .strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
 from .npc import NPC
 from typing import Tuple, List, Optional, Callable, Dict, Any, TYPE_CHECKING
@@ -38,18 +39,8 @@ class Dungeon:
         # Hero (set via add_hero() for custom strategies)
         self.hero: Optional["Hero"] = None
 
-    # Tiles that can be walked on
-    WALKABLE_TILES = (
-        Tile.FLOOR,
-        Tile.NORTH_DOOR_WEST,
-        Tile.NORTH_DOOR_EAST,
-        Tile.SOUTH_DOOR_WEST,
-        Tile.SOUTH_DOOR_EAST,
-        Tile.WEST_DOOR_NORTH,
-        Tile.WEST_DOOR_SOUTH,
-        Tile.EAST_DOOR_NORTH,
-        Tile.EAST_DOOR_SOUTH,
-    )
+    # Tiles that can be walked on (use metal labyrinth walkable tiles)
+    WALKABLE_TILES = METAL_WALKABLE_TILES
 
     def is_walkable(self, x: float, y: float) -> bool:
         """Check if a pixel position is walkable."""

@@ -17,25 +17,14 @@ from dungeon.dungeon_gen import (
 
 def get_walkable_tiles(dungeon_map: np.ndarray) -> Set[Tuple[int, int]]:
     """Extract all walkable tile coordinates from the dungeon map."""
+    from dungeon.metal_labyrinth_sprites import WALKABLE_TILES
+
     walkable_tiles = set()
     rows, cols = dungeon_map.shape
 
-    # All tiles that can be walked on
-    walkable_tile_types = {
-        Tile.FLOOR,
-        Tile.NORTH_DOOR_WEST,
-        Tile.NORTH_DOOR_EAST,
-        Tile.SOUTH_DOOR_WEST,
-        Tile.SOUTH_DOOR_EAST,
-        Tile.WEST_DOOR_NORTH,
-        Tile.WEST_DOOR_SOUTH,
-        Tile.EAST_DOOR_NORTH,
-        Tile.EAST_DOOR_SOUTH,
-    }
-
     for row in range(rows):
         for col in range(cols):
-            if dungeon_map[row, col] in walkable_tile_types:
+            if dungeon_map[row, col] in WALKABLE_TILES:
                 walkable_tiles.add((row, col))
 
     return walkable_tiles

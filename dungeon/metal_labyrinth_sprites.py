@@ -149,6 +149,8 @@ METAL_ASCII_TO_TILE: Dict[str, MetalTile] = {
     # Pillar
     "P": MetalTile.PILLAR,
     # Doors
+    # Door tiles will rended the same as FLOOR tiles
+    # but can be identified as room boundaries by strategy
     "n": MetalTile.NORTH_DOOR_WEST,
     "N": MetalTile.NORTH_DOOR_EAST,
     "s": MetalTile.SOUTH_DOOR_WEST,
@@ -184,7 +186,6 @@ WALKABLE_TILES = {
     MetalTile.WEST_DOOR_SOUTH,
     MetalTile.EAST_DOOR_NORTH,
     MetalTile.EAST_DOOR_SOUTH,
-    MetalTile.GOAL,
 }
 
 # Door slot characters (for detecting doors in templates)
@@ -272,6 +273,118 @@ def parse_metal_ascii_room(ascii_art: List[str]) -> Tuple[List[List[MetalTile]],
                         )
                     )
 
+    # Third pass: validate door adjacency requirements
+    # These rules ensure doors have proper convex corner framing
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = tiles[row_idx][col_idx]
+
+            # Helper to get tile at position, returns NOTHING if out of bounds
+            def get_tile(r: int, c: int) -> MetalTile:
+                if 0 <= r < height and 0 <= c < width:
+                    return tiles[r][c]
+                return MetalTile.NOTHING
+
+            # West door rules
+            if tile == MetalTile.WEST_DOOR_NORTH:
+                # Requires CONVEX_SE above
+                tile_above = get_tile(row_idx - 1, col_idx)
+                if tile_above != MetalTile.CONVEX_SE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_DOOR_NORTH requires CONVEX_SE above, but found {tile_above.name}",
+                        )
+                    )
+
+            if tile == MetalTile.WEST_DOOR_SOUTH:
+                # Requires CONVEX_NE below
+                tile_below = get_tile(row_idx + 1, col_idx)
+                if tile_below != MetalTile.CONVEX_NE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_DOOR_SOUTH requires CONVEX_NE below, but found {tile_below.name}",
+                        )
+                    )
+
+            # East door rules
+            if tile == MetalTile.EAST_DOOR_NORTH:
+                # Requires CONVEX_SW above
+                tile_above = get_tile(row_idx - 1, col_idx)
+                if tile_above != MetalTile.CONVEX_SW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_DOOR_NORTH requires CONVEX_SW above, but found {tile_above.name}",
+                        )
+                    )
+
+            if tile == MetalTile.EAST_DOOR_SOUTH:
+                # Requires CONVEX_NW below
+                tile_below = get_tile(row_idx + 1, col_idx)
+                if tile_below != MetalTile.CONVEX_NW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_DOOR_SOUTH requires CONVEX_NW below, but found {tile_below.name}",
+                        )
+                    )
+
+            # North door rules
+            if tile == MetalTile.NORTH_DOOR_WEST:
+                # Requires CONVEX_NE to the left
+                tile_left = get_tile(row_idx, col_idx - 1)
+                if tile_left != MetalTile.CONVEX_NE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_DOOR_WEST requires CONVEX_NE to the left, but found {tile_left.name}",
+                        )
+                    )
+
+            if tile == MetalTile.NORTH_DOOR_EAST:
+                # Requires CONVEX_NW to the right
+                tile_right = get_tile(row_idx, col_idx + 1)
+                if tile_right != MetalTile.CONVEX_NW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_DOOR_EAST requires CONVEX_NW to the right, but found {tile_right.name}",
+                        )
+                    )
+
+            # South door rules
+            if tile == MetalTile.SOUTH_DOOR_WEST:
+                # Requires CONVEX_SE to the left
+                tile_left = get_tile(row_idx, col_idx - 1)
+                if tile_left != MetalTile.CONVEX_SE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_DOOR_WEST requires CONVEX_SE to the left, but found {tile_left.name}",
+                        )
+                    )
+
+            if tile == MetalTile.SOUTH_DOOR_EAST:
+                # Requires CONVEX_SW to the right
+                tile_right = get_tile(row_idx, col_idx + 1)
+                if tile_right != MetalTile.CONVEX_SW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_DOOR_EAST requires CONVEX_SW to the right, but found {tile_right.name}",
+                        )
+                    )
+
     return tiles, errors
 
 
@@ -285,8 +398,41 @@ def validate_metal_room(ascii_art: List[str]) -> List[ParseError]:
     return errors
 
 
-# TODO: you need custom metal labyrinth tiling as well,
-# so you can tile walkables like pillar base, north edge floor, etc
+# Mapping from MetalTile values to sprite names for rendering
+TILE_MAP: Dict[int, str] = {
+    MetalTile.FLOOR: "floor",
+    MetalTile.NORTH_WALL_BASE: "north_wall_base",
+    MetalTile.PILLAR_BASE: "pillar_base",
+    MetalTile.CONVEX_SW_BASE: "convex_sw_base",
+    MetalTile.CONVEX_SE_BASE: "convex_se_base",
+    MetalTile.NORTH_WALL: "wall_north",
+    MetalTile.SOUTH_WALL: "wall_south",
+    MetalTile.WEST_WALL: "wall_west",
+    MetalTile.EAST_WALL: "wall_east",
+    MetalTile.NW_CORNER: "wall_nw_corner",
+    MetalTile.NE_CORNER: "wall_ne_corner",
+    MetalTile.SW_CORNER: "wall_sw_corner",
+    MetalTile.SE_CORNER: "wall_se_corner",
+    MetalTile.CONVEX_NW: "convex_nw",
+    MetalTile.CONVEX_NE: "convex_ne",
+    MetalTile.CONVEX_SW: "convex_sw",
+    MetalTile.CONVEX_SE: "convex_se",
+    MetalTile.PILLAR: "pillar",
+    # Door rendering:
+    # - North doors are in the north_wall_base row (below north wall)
+    # - South doors render as floor
+    # - West/East door north halves render as convex base tiles (they're in shadow row)
+    # - West/East door south halves render as floor
+    MetalTile.NORTH_DOOR_WEST: "floor",
+    MetalTile.NORTH_DOOR_EAST: "floor",
+    MetalTile.SOUTH_DOOR_WEST: "floor",
+    MetalTile.SOUTH_DOOR_EAST: "floor",
+    MetalTile.WEST_DOOR_NORTH: "convex_se_base",  # In shadow row, needs convex_se above
+    MetalTile.WEST_DOOR_SOUTH: "floor",
+    MetalTile.EAST_DOOR_NORTH: "convex_sw_base",  # In shadow row, needs convex_sw above
+    MetalTile.EAST_DOOR_SOUTH: "floor",
+    MetalTile.NOTHING: "",  # Empty string means don't render
+}
 
 SPRITE_OFFSETS: Dict[str, Sprite] = {
     "wall_nw_corner": Sprite(
@@ -348,6 +494,38 @@ SPRITE_OFFSETS: Dict[str, Sprite] = {
     # East
     "hero_east_0": Sprite(file="sprites/spaceman_overworld_64x64.png", x=576, y=0),
     "hero_east_1": Sprite(file="sprites/spaceman_overworld_64x64.png", x=640, y=0),
+    # NPC sprites and walk cycles
+    "npc_default": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=0, y=128
+    ),
+    # South
+    "npc_south_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=192, y=128
+    ),
+    "npc_south_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=256, y=128
+    ),
+    # North
+    "npc_north_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=320, y=128
+    ),
+    "npc_north_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=384, y=128
+    ),
+    # West
+    "npc_west_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=448, y=128
+    ),
+    "npc_west_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=512, y=128
+    ),
+    # East
+    "npc_east_0": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=576, y=128
+    ),
+    "npc_east_1": Sprite(
+        file="sprites/spaceman_overworld_64x64.png", x=640, y=128
+    ),
     # Goal
     # TODO: replace this with a television that turns on
     "goal": Sprite(file="sprites/red_heart.png", x=0, y=0),
@@ -358,7 +536,13 @@ SPRITE_OFFSETS: Dict[str, Sprite] = {
         width=128,
         height=192,
         base_width=128,
-        offset_y=32,
+        offset_y=-32,
+        # TODO: We'd like to add a base_offset_y here
+        # as well. It would be nice for the hero
+        # to be able to walk on top of the
+        # bottom 32 pixels of this sprite but
+        # treat the next 64x128 pixels as the location
+        # of the NPC
     ),
     # TODO: redo this portrait art
     "robot_priest_portrait": Sprite(
@@ -425,6 +609,9 @@ class MetalRoomTemplate:
         return validate_metal_room(self.ascii_art)
 
 
+# TODO: Door replacement code needs to manage
+# corners around doors! Right now it'll look pretty weird.
+
 # The metal_labyrinth rooms use a different
 # tile set than the death_mountain rooms,
 # and need their own ascii art decoding.
@@ -441,48 +628,52 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
     MetalRoomTemplate(
         name="large",
         ascii_art=[
-            "1----nN----2",
-            "[,,,,,,,,,,]",
+            "1---`nN~---2",
+            "[,,,,..,,,,]",
             "[..........]",
-            "[..........]",
+            "`..........~",
             "w..........e",
             "W..........E",
+            "!..........^",
             "[..........]",
             "[..........]",
-            "[..........]",
-            "3____sS____4",
+            "3___!sS^___4",
         ],
     ),
     MetalRoomTemplate(
         name="pillars",
         ascii_art=[
-            "1--nN--2",
-            "[,,,,,,]",
+            "1-`nN~-2",
+            "[,,..,,]",
             "[......]",
-            "[..P...]",
+            "`..P...~",
             "w..;...e",
             "W...P..E",
-            "[...;..]",
+            "!...;..^",
             "[......]",
             "[......]",
-            "3__sS__4",
+            "3_!sS^_4",
         ],
     ),
     MetalRoomTemplate(
         name="donut",
         ascii_art=[
-            "1-----nN-----2",
-            "[,,,,,,,,,,,,]",
+            "1----`nN~----2",
+            "[,,,,,..,,,,,]",
             "[............]",
-            "[....^__!....]",
+            "`....^__!....~",
             "w....]  [....e",
             "W....]  [....E",
-            "[....~--`....]",
+            "!....~--`....^",
             "[....<,,>....]",
             "[............]",
-            "3_____sS_____4",
+            "3____!sS^____4",
         ],
     ),
+    # TODO: This room isn't valid because there
+    # aren't corners around the doors, but I
+    # think it'll look just fine.
+    # We need to reconsider what door sides must look like.
     MetalRoomTemplate(
         name="east-west",
         ascii_art=[
