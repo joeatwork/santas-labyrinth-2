@@ -14,44 +14,48 @@ from pathlib import Path
 # Add parent directory to path so we can import dungeon
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dungeon.dungeon_gen import generate_dungeon, Tile
+from dungeon.dungeon_gen import generate_dungeon
+from dungeon.metal_labyrinth_sprites import MetalTile
 
 
-# Mapping from tile IDs to ASCII characters
+# Mapping from MetalTile IDs to ASCII characters
+# Uses the Metal Labyrinth ASCII art conventions from metal_labyrinth_sprites.py
+# TODO: share this with the ascii parsing code, it'll tend to rot
+# otherwise as we add new tiles.
 TILE_TO_ASCII = {
-    Tile.NOTHING: " ",
-    Tile.FLOOR: ".",
-    Tile.NORTH_WALL: "-",
-    Tile.SOUTH_WALL: "_",
-    Tile.WEST_WALL: "[",
-    Tile.EAST_WALL: "]",
-    Tile.NW_CORNER: "1",
-    Tile.NE_CORNER: "2",
-    Tile.SW_CORNER: "3",
-    Tile.SE_CORNER: "4",
-    Tile.PILLAR: "P",
-    Tile.NW_CONVEX_CORNER: "^",
-    Tile.NE_CONVEX_CORNER: "!",
-    Tile.SW_CONVEX_CORNER: "~",
-    Tile.SE_CONVEX_CORNER: ",",
-    Tile.DECORATIVE_NORTH_WALL_0: "=",
-    Tile.NORTH_DOOR_WEST: "n",
-    Tile.NORTH_DOOR_EAST: "N",
-    Tile.SOUTH_DOOR_WEST: "s",
-    Tile.SOUTH_DOOR_EAST: "S",
-    Tile.WEST_DOOR_NORTH: "w",
-    Tile.WEST_DOOR_SOUTH: "W",
-    Tile.EAST_DOOR_NORTH: "e",
-    Tile.EAST_DOOR_SOUTH: "E",
-    # Doorframes (render same as doors for simplicity)
-    Tile.NORTH_DOORFRAME_WEST: "n",
-    Tile.NORTH_DOORFRAME_EAST: "N",
-    Tile.SOUTH_DOORFRAME_WEST: "s",
-    Tile.SOUTH_DOORFRAME_EAST: "S",
-    Tile.WEST_DOORFRAME_NORTH: "w",
-    Tile.WEST_DOORFRAME_SOUTH: "W",
-    Tile.EAST_DOORFRAME_NORTH: "e",
-    Tile.EAST_DOORFRAME_SOUTH: "E",
+    MetalTile.NOTHING: " ",
+    # Corners
+    MetalTile.NW_CORNER: "1",
+    MetalTile.NE_CORNER: "2",
+    MetalTile.SW_CORNER: "3",
+    MetalTile.SE_CORNER: "4",
+    # Walls
+    MetalTile.NORTH_WALL: "-",
+    MetalTile.SOUTH_WALL: "_",
+    MetalTile.WEST_WALL: "[",
+    MetalTile.EAST_WALL: "]",
+    # Floor tiles
+    MetalTile.FLOOR: ".",
+    MetalTile.NORTH_WALL_BASE: ",",  # Shadow row below north walls
+    MetalTile.PILLAR_BASE: ";",
+    MetalTile.CONVEX_SW_BASE: "<",
+    MetalTile.CONVEX_SE_BASE: ">",
+    # Convex corners
+    MetalTile.CONVEX_NW: "^",
+    MetalTile.CONVEX_NE: "!",
+    MetalTile.CONVEX_SW: "~",
+    MetalTile.CONVEX_SE: "`",
+    # Pillar
+    MetalTile.PILLAR: "P",
+    # Doors
+    MetalTile.NORTH_DOOR_WEST: "n",
+    MetalTile.NORTH_DOOR_EAST: "N",
+    MetalTile.SOUTH_DOOR_WEST: "s",
+    MetalTile.SOUTH_DOOR_EAST: "S",
+    MetalTile.WEST_DOOR_NORTH: "w",
+    MetalTile.WEST_DOOR_SOUTH: "W",
+    MetalTile.EAST_DOOR_NORTH: "e",
+    MetalTile.EAST_DOOR_SOUTH: "E",
 }
 
 
@@ -78,7 +82,7 @@ def main():
     if args.seed is not None:
         random.seed(args.seed)
 
-    dungeon_map, start_pos, room_positions, room_assignments = generate_dungeon(
+    dungeon_map, start_pos, room_positions, room_assignments, goal_room_id = generate_dungeon(
         args.num_rooms
     )
 

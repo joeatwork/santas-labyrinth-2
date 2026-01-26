@@ -8,6 +8,8 @@ from dungeon.metal_labyrinth_sprites import (
     fix_tiling_to_valid,
     METAL_ASCII_TO_TILE,
     MetalTile,
+    apply_patterns,
+    ROOM_REPAIR_PATTERNS,
 )
 
 
@@ -18,10 +20,10 @@ class TestRoomTemplateValidation:
         """Every room template must have at least one door."""
         for template in ROOM_TEMPLATES:
             has_door = (
-                template.has_north_door or
-                template.has_south_door or
-                template.has_east_door or
-                template.has_west_door
+                template.has_north_door
+                or template.has_south_door
+                or template.has_east_door
+                or template.has_west_door
             )
             assert has_door, f"Template '{template.name}' has no doors"
 
@@ -30,23 +32,23 @@ class TestRoomTemplateValidation:
         """North doors must be a pair 'nN' (lowercase n followed by uppercase N)."""
         for row_idx, line in enumerate(template.ascii_art):
             for col_idx, char in enumerate(line):
-                if char == 'n':
+                if char == "n":
                     # Must have 'N' immediately to the right
-                    assert col_idx + 1 < len(line), (
-                        f"Template '{template.name}' row {row_idx}: 'n' at end of line, missing 'N'"
-                    )
+                    assert col_idx + 1 < len(
+                        line
+                    ), f"Template '{template.name}' row {row_idx}: 'n' at end of line, missing 'N'"
                     next_char = line[col_idx + 1]
-                    assert next_char == 'N', (
+                    assert next_char == "N", (
                         f"Template '{template.name}' row {row_idx}: 'n' must be followed by 'N', "
                         f"found '{next_char}'"
                     )
-                elif char == 'N':
+                elif char == "N":
                     # Must have 'n' immediately to the left
-                    assert col_idx > 0, (
-                        f"Template '{template.name}' row {row_idx}: 'N' at start of line, missing 'n'"
-                    )
+                    assert (
+                        col_idx > 0
+                    ), f"Template '{template.name}' row {row_idx}: 'N' at start of line, missing 'n'"
                     prev_char = line[col_idx - 1]
-                    assert prev_char == 'n', (
+                    assert prev_char == "n", (
                         f"Template '{template.name}' row {row_idx}: 'N' must be preceded by 'n', "
                         f"found '{prev_char}'"
                     )
@@ -56,23 +58,23 @@ class TestRoomTemplateValidation:
         """South doors must be a pair 'sS' (lowercase s followed by uppercase S)."""
         for row_idx, line in enumerate(template.ascii_art):
             for col_idx, char in enumerate(line):
-                if char == 's':
+                if char == "s":
                     # Must have 'S' immediately to the right
-                    assert col_idx + 1 < len(line), (
-                        f"Template '{template.name}' row {row_idx}: 's' at end of line, missing 'S'"
-                    )
+                    assert col_idx + 1 < len(
+                        line
+                    ), f"Template '{template.name}' row {row_idx}: 's' at end of line, missing 'S'"
                     next_char = line[col_idx + 1]
-                    assert next_char == 'S', (
+                    assert next_char == "S", (
                         f"Template '{template.name}' row {row_idx}: 's' must be followed by 'S', "
                         f"found '{next_char}'"
                     )
-                elif char == 'S':
+                elif char == "S":
                     # Must have 's' immediately to the left
-                    assert col_idx > 0, (
-                        f"Template '{template.name}' row {row_idx}: 'S' at start of line, missing 's'"
-                    )
+                    assert (
+                        col_idx > 0
+                    ), f"Template '{template.name}' row {row_idx}: 'S' at start of line, missing 's'"
                     prev_char = line[col_idx - 1]
-                    assert prev_char == 's', (
+                    assert prev_char == "s", (
                         f"Template '{template.name}' row {row_idx}: 'S' must be preceded by 's', "
                         f"found '{prev_char}'"
                     )
@@ -83,31 +85,31 @@ class TestRoomTemplateValidation:
         lines = template.ascii_art
         for row_idx, line in enumerate(lines):
             for col_idx, char in enumerate(line):
-                if char == 'w':
+                if char == "w":
                     # Must have 'W' immediately below
-                    assert row_idx + 1 < len(lines), (
-                        f"Template '{template.name}' row {row_idx}: 'w' on last row, missing 'W' below"
-                    )
+                    assert row_idx + 1 < len(
+                        lines
+                    ), f"Template '{template.name}' row {row_idx}: 'w' on last row, missing 'W' below"
                     next_line = lines[row_idx + 1]
-                    assert col_idx < len(next_line), (
-                        f"Template '{template.name}' row {row_idx}: 'w' has no character below"
-                    )
+                    assert col_idx < len(
+                        next_line
+                    ), f"Template '{template.name}' row {row_idx}: 'w' has no character below"
                     below_char = next_line[col_idx]
-                    assert below_char == 'W', (
+                    assert below_char == "W", (
                         f"Template '{template.name}' row {row_idx}: 'w' must have 'W' below, "
                         f"found '{below_char}'"
                     )
-                elif char == 'W':
+                elif char == "W":
                     # Must have 'w' immediately above
-                    assert row_idx > 0, (
-                        f"Template '{template.name}' row {row_idx}: 'W' on first row, missing 'w' above"
-                    )
+                    assert (
+                        row_idx > 0
+                    ), f"Template '{template.name}' row {row_idx}: 'W' on first row, missing 'w' above"
                     prev_line = lines[row_idx - 1]
-                    assert col_idx < len(prev_line), (
-                        f"Template '{template.name}' row {row_idx}: 'W' has no character above"
-                    )
+                    assert col_idx < len(
+                        prev_line
+                    ), f"Template '{template.name}' row {row_idx}: 'W' has no character above"
                     above_char = prev_line[col_idx]
-                    assert above_char == 'w', (
+                    assert above_char == "w", (
                         f"Template '{template.name}' row {row_idx}: 'W' must have 'w' above, "
                         f"found '{above_char}'"
                     )
@@ -118,31 +120,31 @@ class TestRoomTemplateValidation:
         lines = template.ascii_art
         for row_idx, line in enumerate(lines):
             for col_idx, char in enumerate(line):
-                if char == 'e':
+                if char == "e":
                     # Must have 'E' immediately below
-                    assert row_idx + 1 < len(lines), (
-                        f"Template '{template.name}' row {row_idx}: 'e' on last row, missing 'E' below"
-                    )
+                    assert row_idx + 1 < len(
+                        lines
+                    ), f"Template '{template.name}' row {row_idx}: 'e' on last row, missing 'E' below"
                     next_line = lines[row_idx + 1]
-                    assert col_idx < len(next_line), (
-                        f"Template '{template.name}' row {row_idx}: 'e' has no character below"
-                    )
+                    assert col_idx < len(
+                        next_line
+                    ), f"Template '{template.name}' row {row_idx}: 'e' has no character below"
                     below_char = next_line[col_idx]
-                    assert below_char == 'E', (
+                    assert below_char == "E", (
                         f"Template '{template.name}' row {row_idx}: 'e' must have 'E' below, "
                         f"found '{below_char}'"
                     )
-                elif char == 'E':
+                elif char == "E":
                     # Must have 'e' immediately above
-                    assert row_idx > 0, (
-                        f"Template '{template.name}' row {row_idx}: 'E' on first row, missing 'e' above"
-                    )
+                    assert (
+                        row_idx > 0
+                    ), f"Template '{template.name}' row {row_idx}: 'E' on first row, missing 'e' above"
                     prev_line = lines[row_idx - 1]
-                    assert col_idx < len(prev_line), (
-                        f"Template '{template.name}' row {row_idx}: 'E' has no character above"
-                    )
+                    assert col_idx < len(
+                        prev_line
+                    ), f"Template '{template.name}' row {row_idx}: 'E' has no character above"
                     above_char = prev_line[col_idx]
-                    assert above_char == 'e', (
+                    assert above_char == "e", (
                         f"Template '{template.name}' row {row_idx}: 'E' must have 'e' above, "
                         f"found '{above_char}'"
                     )
@@ -169,14 +171,12 @@ class TestRoomTemplateValidation:
 
         # Filter out door adjacency errors - those are expected for room templates
         # since doors are designed to connect to other rooms
-        non_door_errors = [
-            e for e in errors
-            if "DOOR" not in e.message
-        ]
+        non_door_errors = [e for e in errors if "DOOR" not in e.message]
 
-        assert len(non_door_errors) == 0, (
-            f"Template '{template.name}' has tiling errors:\n" +
-            "\n".join(f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors)
+        assert (
+            len(non_door_errors) == 0
+        ), f"Template '{template.name}' has tiling errors:\n" + "\n".join(
+            f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors
         )
 
     @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
@@ -193,6 +193,10 @@ class TestRoomTemplateValidation:
             MetalTile.EAST_DOOR_NORTH: MetalTile.EAST_WALL,
             MetalTile.EAST_DOOR_SOUTH: MetalTile.EAST_WALL,
         }
+
+        # TODO: I wonder if we can use the dungeon logic for unconnected doors
+        # on a one-door dungeon to replace the doors rather than writing the
+        # logic in this test directly.
 
         # Parse ASCII art into tiles
         width = max(len(line) for line in template.ascii_art)
@@ -214,19 +218,55 @@ class TestRoomTemplateValidation:
                 if tile in door_to_wall:
                     tiles_array[row_idx, col_idx] = door_to_wall[tile]
 
-        # Apply fix_tiling_to_valid to fix any issues
+        # Apply fix_tiling_to_valid to heal issues we introduced removing the doors
         fix_tiling_to_valid(tiles_array)
 
         # Check for tiling errors
         errors = check_valid_tiling(tiles_array)
 
         # Filter out door adjacency errors (there shouldn't be any since we replaced all doors)
-        non_door_errors = [
-            e for e in errors
-            if "DOOR" not in e.message
-        ]
+        non_door_errors = [e for e in errors if "DOOR" not in e.message]
 
         assert len(non_door_errors) == 0, (
-            f"Template '{template.name}' has tiling errors after door replacement:\n" +
-            "\n".join(f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors)
+            f"Template '{template.name}' has tiling errors after door replacement:\n"
+            + "\n".join(
+                f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors
+            )
         )
+
+
+class TestTilePatterns:
+    """Tests for ROOM_REPAIR_PATTERNS tile pattern matching and replacement."""
+
+    def test_straight_east_wall_pattern_fixes_middle_tile(self):
+        """
+        Test that the "ensure straight east wall" pattern correctly replaces
+        the middle tile in a vertical run of east walls.
+
+        Before:              After:
+        ]  (EAST_WALL)       ]  (EAST_WALL)
+        -  (NORTH_WALL)  ->  ]  (EAST_WALL)
+        ]  (EAST_WALL)       ]  (EAST_WALL)
+
+        The pattern should replace a misplaced horizontal wall between
+        two vertically adjacent east walls with an east wall.
+        """
+        # Create a 3x1 tile array with east walls and a north wall in the middle
+        # Using: ] = EAST_WALL, - = NORTH_WALL
+        tiles = np.array(
+            [
+                [MetalTile.EAST_WALL],  # row 0: ]
+                [MetalTile.NORTH_WALL],  # row 1: - (wrong, should be ])
+                [MetalTile.EAST_WALL],  # row 2: ]
+            ],
+            dtype=int,
+        )
+
+        # Apply patterns
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # The middle tile should now be EAST_WALL
+        assert tiles[1, 0] == MetalTile.EAST_WALL, (
+            f"Expected EAST_WALL at (1,0), got {MetalTile(tiles[1, 0]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"

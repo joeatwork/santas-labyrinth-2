@@ -153,8 +153,8 @@ def create_dungeon_background(dungeon_map: DungeonMap, assets: AssetManager) -> 
     width = cols * TILE_SIZE
     height = rows * TILE_SIZE
 
-    # Create black background
-    bg: Image = np.zeros((height, width, 3), np.uint8)
+    # Create background
+    bg: Image = np.full((height, width, 3), 0x60, dtype=np.uint8)
 
     print(f"Generating dungeon background: {width}x{height}...", file=sys.stderr)
 
