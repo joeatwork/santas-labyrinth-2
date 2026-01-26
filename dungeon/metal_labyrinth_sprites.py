@@ -170,6 +170,20 @@ TILES_REQUIRING_BASE: Dict[MetalTile, MetalTile] = {
     MetalTile.CONVEX_SE: MetalTile.CONVEX_SE_BASE,
 }
 
+# Base tiles and the tiles that should be directly above them
+# This is used to detect orphaned base tiles
+# Note: NORTH_WALL_BASE can also be below CONVEX_SW/CONVEX_SE when they're
+# part of the north wall row (adjacent to doors)
+BASE_TILES_EXPECTED_ABOVE: Dict[MetalTile, set] = {
+    MetalTile.NORTH_WALL_BASE: {
+        MetalTile.NORTH_WALL, MetalTile.NW_CORNER, MetalTile.NE_CORNER,
+        MetalTile.CONVEX_SW, MetalTile.CONVEX_SE,  # When part of north wall row
+    },
+    MetalTile.PILLAR_BASE: {MetalTile.PILLAR},
+    MetalTile.CONVEX_SW_BASE: {MetalTile.CONVEX_SW},
+    MetalTile.CONVEX_SE_BASE: {MetalTile.CONVEX_SE},
+}
+
 # Walkable tiles (for pathfinding/collision)
 WALKABLE_TILES = {
     MetalTile.FLOOR,
@@ -198,6 +212,484 @@ class ParseError:
     row: int
     column: int
     message: str
+
+
+import numpy as np
+
+
+def check_valid_tiling(tiles: np.ndarray) -> List[ParseError]:
+    """
+    Check if a 2D tile array satisfies all tiling rules.
+
+    Rules checked:
+    1. Base tile requirements: certain tiles need specific base tiles below them
+    2. Door adjacency: doors need proper convex corner framing
+    3. Convex corner adjacency: convex corners need walkable tiles on appropriate sides
+
+    Args:
+        tiles: A 2D numpy array of MetalTile values
+
+    Returns:
+        A list of ParseError objects describing any violations found.
+    """
+    errors: List[ParseError] = []
+    height, width = tiles.shape
+
+    # Helper to get tile at position, returns NOTHING if out of bounds
+    def get_tile(r: int, c: int) -> MetalTile:
+        if 0 <= r < height and 0 <= c < width:
+            return MetalTile(tiles[r, c])
+        return MetalTile.NOTHING
+
+    # Check base tile requirements
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            if tile in TILES_REQUIRING_BASE:
+                required_base = TILES_REQUIRING_BASE[tile]
+
+                # Check if there's a row below
+                if row_idx + 1 >= height:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"Tile {tile.name} requires {required_base.name} below, but no row exists",
+                        )
+                    )
+                    continue
+
+                # Check if the tile below is the required base
+                tile_below = get_tile(row_idx + 1, col_idx)
+
+                # Allow some flexibility: west/east walls can be below corners
+                # (the wall continues down the side)
+                if tile in (MetalTile.NW_CORNER, MetalTile.NE_CORNER):
+                    # Corners can have west/east walls below them instead of base
+                    if tile_below in (MetalTile.WEST_WALL, MetalTile.EAST_WALL):
+                        continue
+
+                # CONVEX_SW and CONVEX_SE can have NORTH_WALL_BASE below when
+                # they're part of the north wall row (adjacent to north doors)
+                if tile in (MetalTile.CONVEX_SW, MetalTile.CONVEX_SE):
+                    if tile_below == MetalTile.NORTH_WALL_BASE:
+                        continue
+
+                if tile_below != required_base:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"Tile {tile.name} requires {required_base.name} below, "
+                            f"but found {tile_below.name}",
+                        )
+                    )
+
+    # Check door adjacency requirements
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            # West door rules
+            if tile == MetalTile.WEST_DOOR_NORTH:
+                tile_above = get_tile(row_idx - 1, col_idx)
+                if tile_above != MetalTile.CONVEX_SE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_DOOR_NORTH requires CONVEX_SE above, but found {tile_above.name}",
+                        )
+                    )
+
+            if tile == MetalTile.WEST_DOOR_SOUTH:
+                tile_below = get_tile(row_idx + 1, col_idx)
+                if tile_below != MetalTile.CONVEX_NE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"WEST_DOOR_SOUTH requires CONVEX_NE below, but found {tile_below.name}",
+                        )
+                    )
+
+            # East door rules
+            if tile == MetalTile.EAST_DOOR_NORTH:
+                tile_above = get_tile(row_idx - 1, col_idx)
+                if tile_above != MetalTile.CONVEX_SW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_DOOR_NORTH requires CONVEX_SW above, but found {tile_above.name}",
+                        )
+                    )
+
+            if tile == MetalTile.EAST_DOOR_SOUTH:
+                tile_below = get_tile(row_idx + 1, col_idx)
+                if tile_below != MetalTile.CONVEX_NW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"EAST_DOOR_SOUTH requires CONVEX_NW below, but found {tile_below.name}",
+                        )
+                    )
+
+            # North door rules
+            if tile == MetalTile.NORTH_DOOR_WEST:
+                tile_left = get_tile(row_idx, col_idx - 1)
+                if tile_left != MetalTile.CONVEX_NE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_DOOR_WEST requires CONVEX_NE to the left, but found {tile_left.name}",
+                        )
+                    )
+
+            if tile == MetalTile.NORTH_DOOR_EAST:
+                tile_right = get_tile(row_idx, col_idx + 1)
+                if tile_right != MetalTile.CONVEX_NW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"NORTH_DOOR_EAST requires CONVEX_NW to the right, but found {tile_right.name}",
+                        )
+                    )
+
+            # South door rules
+            if tile == MetalTile.SOUTH_DOOR_WEST:
+                tile_left = get_tile(row_idx, col_idx - 1)
+                if tile_left != MetalTile.CONVEX_SE:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_DOOR_WEST requires CONVEX_SE to the left, but found {tile_left.name}",
+                        )
+                    )
+
+            if tile == MetalTile.SOUTH_DOOR_EAST:
+                tile_right = get_tile(row_idx, col_idx + 1)
+                if tile_right != MetalTile.CONVEX_SW:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"SOUTH_DOOR_EAST requires CONVEX_SW to the right, but found {tile_right.name}",
+                        )
+                    )
+
+    # Check orphaned base tiles (base tiles without their expected tile above)
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            if tile in BASE_TILES_EXPECTED_ABOVE:
+                expected_above = BASE_TILES_EXPECTED_ABOVE[tile]
+
+                # Check if there's a row above
+                if row_idx - 1 < 0:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"Base tile {tile.name} has no row above",
+                        )
+                    )
+                    continue
+
+                tile_above = get_tile(row_idx - 1, col_idx)
+
+                # Special case: NORTH_WALL_BASE can also be below west/east walls
+                # (at NW/NE corners where the wall continues down)
+                if tile == MetalTile.NORTH_WALL_BASE:
+                    if tile_above in (MetalTile.WEST_WALL, MetalTile.EAST_WALL):
+                        continue
+
+                if tile_above not in expected_above:
+                    expected_names = ", ".join(t.name for t in expected_above)
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"Base tile {tile.name} requires one of [{expected_names}] above, "
+                            f"but found {tile_above.name}",
+                        )
+                    )
+
+    # Check convex corner adjacency requirements
+    # Convex corners need walkable tiles on the sides that "poke" into the room
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            # CONVEX_SW pokes toward SW, so needs walkable to south and west
+            if tile == MetalTile.CONVEX_SW:
+                tile_south = get_tile(row_idx + 1, col_idx)
+                tile_west = get_tile(row_idx, col_idx - 1)
+                if tile_south not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_SW requires walkable tile to south, but found {tile_south.name}",
+                        )
+                    )
+                if tile_west not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_SW requires walkable tile to west, but found {tile_west.name}",
+                        )
+                    )
+
+            # CONVEX_SE pokes toward SE, so needs walkable to south and east
+            if tile == MetalTile.CONVEX_SE:
+                tile_south = get_tile(row_idx + 1, col_idx)
+                tile_east = get_tile(row_idx, col_idx + 1)
+                if tile_south not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_SE requires walkable tile to south, but found {tile_south.name}",
+                        )
+                    )
+                if tile_east not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_SE requires walkable tile to east, but found {tile_east.name}",
+                        )
+                    )
+
+            # CONVEX_NW pokes toward NW, so needs walkable to north and west
+            if tile == MetalTile.CONVEX_NW:
+                tile_north = get_tile(row_idx - 1, col_idx)
+                tile_west = get_tile(row_idx, col_idx - 1)
+                if tile_north not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_NW requires walkable tile to north, but found {tile_north.name}",
+                        )
+                    )
+                if tile_west not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_NW requires walkable tile to west, but found {tile_west.name}",
+                        )
+                    )
+
+            # CONVEX_NE pokes toward NE, so needs walkable to north and east
+            if tile == MetalTile.CONVEX_NE:
+                tile_north = get_tile(row_idx - 1, col_idx)
+                tile_east = get_tile(row_idx, col_idx + 1)
+                if tile_north not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_NE requires walkable tile to north, but found {tile_north.name}",
+                        )
+                    )
+                if tile_east not in WALKABLE_TILES:
+                    errors.append(
+                        ParseError(
+                            row_idx,
+                            col_idx,
+                            f"CONVEX_NE requires walkable tile to east, but found {tile_east.name}",
+                        )
+                    )
+
+    return errors
+
+
+def fix_tiling_to_valid(tiles: np.ndarray) -> None:
+    """
+    Transform tiles in-place to satisfy tiling rules.
+
+    This function applies fixes to make the tiling valid:
+    1. Adds required base tiles below tiles that need them
+    2. Replaces convex corners with straight walls when they don't have
+       walkable tiles on the appropriate sides
+
+    Args:
+        tiles: A 2D numpy array of MetalTile values (modified in place)
+    """
+    height, width = tiles.shape
+
+    # Helper to get tile at position, returns NOTHING if out of bounds
+    def get_tile(r: int, c: int) -> MetalTile:
+        if 0 <= r < height and 0 <= c < width:
+            return MetalTile(tiles[r, c])
+        return MetalTile.NOTHING
+
+    # Helper to set tile at position (no-op if out of bounds)
+    def set_tile(r: int, c: int, tile: MetalTile) -> None:
+        if 0 <= r < height and 0 <= c < width:
+            tiles[r, c] = tile
+
+    # First pass: fix base tile requirements
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            if tile in TILES_REQUIRING_BASE:
+                required_base = TILES_REQUIRING_BASE[tile]
+
+                # Skip if no row below
+                if row_idx + 1 >= height:
+                    continue
+
+                tile_below = get_tile(row_idx + 1, col_idx)
+
+                # Allow west/east walls below NW/NE corners
+                if tile in (MetalTile.NW_CORNER, MetalTile.NE_CORNER):
+                    if tile_below in (MetalTile.WEST_WALL, MetalTile.EAST_WALL):
+                        continue
+
+                # Allow NORTH_WALL_BASE below CONVEX_SW/CONVEX_SE (north wall row context)
+                if tile in (MetalTile.CONVEX_SW, MetalTile.CONVEX_SE):
+                    if tile_below == MetalTile.NORTH_WALL_BASE:
+                        continue
+
+                # If the tile below is walkable but not the required base, replace it
+                if tile_below != required_base and tile_below in WALKABLE_TILES:
+                    set_tile(row_idx + 1, col_idx, required_base)
+
+    # Second pass: replace orphaned base tiles with regular floor
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            if tile in BASE_TILES_EXPECTED_ABOVE:
+                expected_above = BASE_TILES_EXPECTED_ABOVE[tile]
+
+                # Check if there's a row above
+                if row_idx - 1 < 0:
+                    # No row above, replace with floor
+                    set_tile(row_idx, col_idx, MetalTile.FLOOR)
+                    continue
+
+                tile_above = get_tile(row_idx - 1, col_idx)
+
+                # Special case: NORTH_WALL_BASE can also be below west/east walls
+                if tile == MetalTile.NORTH_WALL_BASE:
+                    if tile_above in (MetalTile.WEST_WALL, MetalTile.EAST_WALL):
+                        continue
+
+                # If the tile above is not what we expect, replace with floor
+                if tile_above not in expected_above:
+                    set_tile(row_idx, col_idx, MetalTile.FLOOR)
+
+    # Helper to determine the best wall replacement based on neighbors
+    WALL_TILES = {MetalTile.NORTH_WALL, MetalTile.SOUTH_WALL, MetalTile.WEST_WALL, MetalTile.EAST_WALL}
+
+    def choose_wall_replacement(row_idx: int, col_idx: int, default_wall: MetalTile) -> MetalTile:
+        """Choose the best wall type based on neighboring tiles."""
+        tile_north = get_tile(row_idx - 1, col_idx)
+        tile_south = get_tile(row_idx + 1, col_idx)
+        tile_west = get_tile(row_idx, col_idx - 1)
+        tile_east = get_tile(row_idx, col_idx + 1)
+
+        # Check horizontal neighbors first (left and right)
+        if tile_west in WALL_TILES and tile_east == tile_west:
+            return tile_west
+        # Check vertical neighbors (above and below)
+        if tile_north in WALL_TILES and tile_south == tile_north:
+            return tile_north
+        # Check if one horizontal neighbor is a wall type
+        if tile_west in WALL_TILES and tile_east in WALKABLE_TILES:
+            return tile_west
+        if tile_east in WALL_TILES and tile_west in WALKABLE_TILES:
+            return tile_east
+        # Check if one vertical neighbor is a wall type
+        if tile_north in WALL_TILES and tile_south in WALKABLE_TILES:
+            return tile_north
+        if tile_south in WALL_TILES and tile_north in WALKABLE_TILES:
+            return tile_south
+        # Fall back to default
+        return default_wall
+
+    # Third pass: replace invalid convex corners with straight walls
+    # We need to iterate until no more changes are made because
+    # replacing a convex corner might affect adjacent tiles
+    changed = True
+    while changed:
+        changed = False
+        for row_idx in range(height):
+            for col_idx in range(width):
+                tile = MetalTile(tiles[row_idx, col_idx])
+
+                # CONVEX_SW pokes toward SW, needs walkable to south and west
+                if tile == MetalTile.CONVEX_SW:
+                    tile_south = get_tile(row_idx + 1, col_idx)
+                    tile_west = get_tile(row_idx, col_idx - 1)
+                    if tile_south not in WALKABLE_TILES or tile_west not in WALKABLE_TILES:
+                        replacement = choose_wall_replacement(row_idx, col_idx, MetalTile.EAST_WALL)
+                        set_tile(row_idx, col_idx, replacement)
+                        changed = True
+
+                # CONVEX_SE pokes toward SE, needs walkable to south and east
+                elif tile == MetalTile.CONVEX_SE:
+                    tile_south = get_tile(row_idx + 1, col_idx)
+                    tile_east = get_tile(row_idx, col_idx + 1)
+                    if tile_south not in WALKABLE_TILES or tile_east not in WALKABLE_TILES:
+                        replacement = choose_wall_replacement(row_idx, col_idx, MetalTile.WEST_WALL)
+                        set_tile(row_idx, col_idx, replacement)
+                        changed = True
+
+                # CONVEX_NW pokes toward NW, needs walkable to north and west
+                elif tile == MetalTile.CONVEX_NW:
+                    tile_north = get_tile(row_idx - 1, col_idx)
+                    tile_west = get_tile(row_idx, col_idx - 1)
+                    if tile_north not in WALKABLE_TILES or tile_west not in WALKABLE_TILES:
+                        replacement = choose_wall_replacement(row_idx, col_idx, MetalTile.EAST_WALL)
+                        set_tile(row_idx, col_idx, replacement)
+                        changed = True
+
+                # CONVEX_NE pokes toward NE, needs walkable to north and east
+                elif tile == MetalTile.CONVEX_NE:
+                    tile_north = get_tile(row_idx - 1, col_idx)
+                    tile_east = get_tile(row_idx, col_idx + 1)
+                    if tile_north not in WALKABLE_TILES or tile_east not in WALKABLE_TILES:
+                        replacement = choose_wall_replacement(row_idx, col_idx, MetalTile.WEST_WALL)
+                        set_tile(row_idx, col_idx, replacement)
+                        changed = True
+
+    # Fourth pass: replace any newly orphaned base tiles (after convex corner replacement)
+    for row_idx in range(height):
+        for col_idx in range(width):
+            tile = MetalTile(tiles[row_idx, col_idx])
+
+            if tile in BASE_TILES_EXPECTED_ABOVE:
+                expected_above = BASE_TILES_EXPECTED_ABOVE[tile]
+
+                # Check if there's a row above
+                if row_idx - 1 < 0:
+                    set_tile(row_idx, col_idx, MetalTile.FLOOR)
+                    continue
+
+                tile_above = get_tile(row_idx - 1, col_idx)
+
+                # Special case: NORTH_WALL_BASE can also be below west/east walls
+                if tile == MetalTile.NORTH_WALL_BASE:
+                    if tile_above in (MetalTile.WEST_WALL, MetalTile.EAST_WALL):
+                        continue
+
+                # If the tile above is not what we expect, replace with floor
+                if tile_above not in expected_above:
+                    set_tile(row_idx, col_idx, MetalTile.FLOOR)
 
 
 def parse_metal_ascii_room(ascii_art: List[str]) -> Tuple[List[List[MetalTile]], List[ParseError]]:
@@ -233,156 +725,11 @@ def parse_metal_ascii_room(ascii_art: List[str]) -> Tuple[List[List[MetalTile]],
 
         tiles.append(row)
 
-    # Second pass: validate base tile requirements
-    for row_idx in range(height):
-        for col_idx in range(width):
-            tile = tiles[row_idx][col_idx]
+    # Convert to numpy array for validation
+    tiles_array = np.array([[int(t) for t in row] for row in tiles], dtype=int)
 
-            if tile in TILES_REQUIRING_BASE:
-                required_base = TILES_REQUIRING_BASE[tile]
-
-                # Check if there's a row below
-                if row_idx + 1 >= height:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"Tile {tile.name} requires {required_base.name} below, but no row exists",
-                        )
-                    )
-                    continue
-
-                # Check if the tile below is the required base
-                tile_below = tiles[row_idx + 1][col_idx]
-
-                # Allow some flexibility: west/east walls can be below corners
-                # (the wall continues down the side)
-                if tile in (MetalTile.NW_CORNER, MetalTile.NE_CORNER):
-                    # Corners can have west/east walls below them instead of base
-                    if tile_below in (MetalTile.WEST_WALL, MetalTile.EAST_WALL):
-                        continue
-
-                if tile_below != required_base:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"Tile {tile.name} requires {required_base.name} below, "
-                            f"but found {tile_below.name}",
-                        )
-                    )
-
-    # Third pass: validate door adjacency requirements
-    # These rules ensure doors have proper convex corner framing
-    for row_idx in range(height):
-        for col_idx in range(width):
-            tile = tiles[row_idx][col_idx]
-
-            # Helper to get tile at position, returns NOTHING if out of bounds
-            def get_tile(r: int, c: int) -> MetalTile:
-                if 0 <= r < height and 0 <= c < width:
-                    return tiles[r][c]
-                return MetalTile.NOTHING
-
-            # West door rules
-            if tile == MetalTile.WEST_DOOR_NORTH:
-                # Requires CONVEX_SE above
-                tile_above = get_tile(row_idx - 1, col_idx)
-                if tile_above != MetalTile.CONVEX_SE:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"WEST_DOOR_NORTH requires CONVEX_SE above, but found {tile_above.name}",
-                        )
-                    )
-
-            if tile == MetalTile.WEST_DOOR_SOUTH:
-                # Requires CONVEX_NE below
-                tile_below = get_tile(row_idx + 1, col_idx)
-                if tile_below != MetalTile.CONVEX_NE:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"WEST_DOOR_SOUTH requires CONVEX_NE below, but found {tile_below.name}",
-                        )
-                    )
-
-            # East door rules
-            if tile == MetalTile.EAST_DOOR_NORTH:
-                # Requires CONVEX_SW above
-                tile_above = get_tile(row_idx - 1, col_idx)
-                if tile_above != MetalTile.CONVEX_SW:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"EAST_DOOR_NORTH requires CONVEX_SW above, but found {tile_above.name}",
-                        )
-                    )
-
-            if tile == MetalTile.EAST_DOOR_SOUTH:
-                # Requires CONVEX_NW below
-                tile_below = get_tile(row_idx + 1, col_idx)
-                if tile_below != MetalTile.CONVEX_NW:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"EAST_DOOR_SOUTH requires CONVEX_NW below, but found {tile_below.name}",
-                        )
-                    )
-
-            # North door rules
-            if tile == MetalTile.NORTH_DOOR_WEST:
-                # Requires CONVEX_NE to the left
-                tile_left = get_tile(row_idx, col_idx - 1)
-                if tile_left != MetalTile.CONVEX_NE:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"NORTH_DOOR_WEST requires CONVEX_NE to the left, but found {tile_left.name}",
-                        )
-                    )
-
-            if tile == MetalTile.NORTH_DOOR_EAST:
-                # Requires CONVEX_NW to the right
-                tile_right = get_tile(row_idx, col_idx + 1)
-                if tile_right != MetalTile.CONVEX_NW:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"NORTH_DOOR_EAST requires CONVEX_NW to the right, but found {tile_right.name}",
-                        )
-                    )
-
-            # South door rules
-            if tile == MetalTile.SOUTH_DOOR_WEST:
-                # Requires CONVEX_SE to the left
-                tile_left = get_tile(row_idx, col_idx - 1)
-                if tile_left != MetalTile.CONVEX_SE:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"SOUTH_DOOR_WEST requires CONVEX_SE to the left, but found {tile_left.name}",
-                        )
-                    )
-
-            if tile == MetalTile.SOUTH_DOOR_EAST:
-                # Requires CONVEX_SW to the right
-                tile_right = get_tile(row_idx, col_idx + 1)
-                if tile_right != MetalTile.CONVEX_SW:
-                    errors.append(
-                        ParseError(
-                            row_idx,
-                            col_idx,
-                            f"SOUTH_DOOR_EAST requires CONVEX_SW to the right, but found {tile_right.name}",
-                        )
-                    )
+    # Validate using check_valid_tiling
+    errors.extend(check_valid_tiling(tiles_array))
 
     return tiles, errors
 

@@ -1,7 +1,14 @@
 """Tests for room template validation."""
 
+import numpy as np
 import pytest
 from dungeon.dungeon_gen import ROOM_TEMPLATES, RoomTemplate
+from dungeon.metal_labyrinth_sprites import (
+    check_valid_tiling,
+    fix_tiling_to_valid,
+    METAL_ASCII_TO_TILE,
+    MetalTile,
+)
 
 
 class TestRoomTemplateValidation:
@@ -139,3 +146,87 @@ class TestRoomTemplateValidation:
                         f"Template '{template.name}' row {row_idx}: 'E' must have 'e' above, "
                         f"found '{above_char}'"
                     )
+
+    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
+    def test_template_has_valid_tiling(self, template: RoomTemplate):
+        """Room template must satisfy all tiling rules (base tiles, convex corners, etc.)."""
+        # Parse ASCII art into tiles
+        width = max(len(line) for line in template.ascii_art)
+        height = len(template.ascii_art)
+
+        tiles = []
+        for line in template.ascii_art:
+            row = [METAL_ASCII_TO_TILE[char] for char in line]
+            # Pad row to width
+            while len(row) < width:
+                row.append(0)  # NOTHING
+            tiles.append(row)
+
+        tiles_array = np.array(tiles, dtype=int)
+
+        # Check for tiling errors
+        errors = check_valid_tiling(tiles_array)
+
+        # Filter out door adjacency errors - those are expected for room templates
+        # since doors are designed to connect to other rooms
+        non_door_errors = [
+            e for e in errors
+            if "DOOR" not in e.message
+        ]
+
+        assert len(non_door_errors) == 0, (
+            f"Template '{template.name}' has tiling errors:\n" +
+            "\n".join(f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors)
+        )
+
+    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
+    def test_template_valid_after_all_doors_replaced(self, template: RoomTemplate):
+        """Room template must have valid tiling after all doors are replaced with walls."""
+        # Mapping from door tiles to their corresponding wall tiles
+        door_to_wall = {
+            MetalTile.NORTH_DOOR_WEST: MetalTile.NORTH_WALL,
+            MetalTile.NORTH_DOOR_EAST: MetalTile.NORTH_WALL,
+            MetalTile.SOUTH_DOOR_WEST: MetalTile.SOUTH_WALL,
+            MetalTile.SOUTH_DOOR_EAST: MetalTile.SOUTH_WALL,
+            MetalTile.WEST_DOOR_NORTH: MetalTile.WEST_WALL,
+            MetalTile.WEST_DOOR_SOUTH: MetalTile.WEST_WALL,
+            MetalTile.EAST_DOOR_NORTH: MetalTile.EAST_WALL,
+            MetalTile.EAST_DOOR_SOUTH: MetalTile.EAST_WALL,
+        }
+
+        # Parse ASCII art into tiles
+        width = max(len(line) for line in template.ascii_art)
+
+        tiles = []
+        for line in template.ascii_art:
+            row = [METAL_ASCII_TO_TILE[char] for char in line]
+            # Pad row to width
+            while len(row) < width:
+                row.append(0)  # NOTHING
+            tiles.append(row)
+
+        tiles_array = np.array(tiles, dtype=int)
+
+        # Replace all door tiles with wall tiles
+        for row_idx in range(tiles_array.shape[0]):
+            for col_idx in range(tiles_array.shape[1]):
+                tile = MetalTile(tiles_array[row_idx, col_idx])
+                if tile in door_to_wall:
+                    tiles_array[row_idx, col_idx] = door_to_wall[tile]
+
+        # Apply fix_tiling_to_valid to fix any issues
+        fix_tiling_to_valid(tiles_array)
+
+        # Check for tiling errors
+        errors = check_valid_tiling(tiles_array)
+
+        # Filter out door adjacency errors (there shouldn't be any since we replaced all doors)
+        non_door_errors = [
+            e for e in errors
+            if "DOOR" not in e.message
+        ]
+
+        assert len(non_door_errors) == 0, (
+            f"Template '{template.name}' has tiling errors after door replacement:\n" +
+            "\n".join(f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors)
+        )
