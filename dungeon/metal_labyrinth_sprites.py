@@ -1039,33 +1039,38 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
     ),
 
     # Ensure walkable doors
+    # Each door needs walkable space on the interior side (facing into the room)
+    # North door: walkable to the SOUTH (1, 0)
     TilePattern(
         match=[
             (0, 0, _Y(MetalTile.NORTH_DOOR_EAST, MetalTile.NORTH_DOOR_WEST)),
-            (0, 1, _N(*WALKABLE_TILES)),
-        ],
-        replace=[(0, 1, MetalTile.FLOOR)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_EAST, MetalTile.SOUTH_DOOR_WEST)),
-            (0, -1, _N(*WALKABLE_TILES)),
-        ],
-        replace=[(0, -1, MetalTile.FLOOR)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH, MetalTile.WEST_DOOR_SOUTH)),
             (1, 0, _N(*WALKABLE_TILES)),
         ],
         replace=[(1, 0, MetalTile.FLOOR)],
     ),
+    # South door: walkable to the NORTH (-1, 0)
     TilePattern(
         match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH, MetalTile.WEST_DOOR_SOUTH)),
+            (0, 0, _Y(MetalTile.SOUTH_DOOR_EAST, MetalTile.SOUTH_DOOR_WEST)),
             (-1, 0, _N(*WALKABLE_TILES)),
         ],
         replace=[(-1, 0, MetalTile.FLOOR)],
+    ),
+    # West door: walkable to the EAST (0, 1)
+    TilePattern(
+        match=[
+            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH, MetalTile.WEST_DOOR_SOUTH)),
+            (0, 1, _N(*WALKABLE_TILES)),
+        ],
+        replace=[(0, 1, MetalTile.FLOOR)],
+    ),
+    # East door: walkable to the WEST (0, -1)
+    TilePattern(
+        match=[
+            (0, 0, _Y(MetalTile.EAST_DOOR_NORTH, MetalTile.EAST_DOOR_SOUTH)),
+            (0, -1, _N(*WALKABLE_TILES)),
+        ],
+        replace=[(0, -1, MetalTile.FLOOR)],
     ),
     # Ensure door boundaries
     # We replace with convex corners, hoping they'll turn into straight walls

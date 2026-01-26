@@ -327,3 +327,90 @@ class TestTilePatterns:
             f"Expected WEST_DOOR_SOUTH at (1,0), got {MetalTile(tiles[1, 0]).name}"
         )
         assert replacements > 0, "Expected at least one replacement"
+
+    def test_north_door_walkable_checks_south(self):
+        """
+        Test that north door walkability is checked to the SOUTH (into the room).
+
+        A north door is on the north wall, so the room interior is to the south.
+
+        Before:           After:
+        n N  (row 0)      n N
+        # #  (row 1)      . .
+
+        Where n=NORTH_DOOR_WEST, N=NORTH_DOOR_EAST, #=NORTH_WALL, .=FLOOR
+        The walkable check should look at (1, 0) - south of the door.
+        """
+        tiles = np.array(
+            [
+                [MetalTile.NORTH_DOOR_WEST, MetalTile.NORTH_DOOR_EAST],
+                [MetalTile.NORTH_WALL, MetalTile.NORTH_WALL],  # Non-walkable below
+            ],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # Both tiles below the door should become FLOOR
+        assert tiles[1, 0] == MetalTile.FLOOR, (
+            f"Expected FLOOR at (1,0), got {MetalTile(tiles[1, 0]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
+
+    def test_west_door_walkable_checks_east(self):
+        """
+        Test that west door walkability is checked to the EAST (into the room).
+
+        A west door is on the west wall, so the room interior is to the east.
+
+        Before:       After:
+        w #  (row 0)  w .
+        W #  (row 1)  W .
+
+        Where w=WEST_DOOR_NORTH, W=WEST_DOOR_SOUTH, #=WEST_WALL, .=FLOOR
+        The walkable check should look at (0, 1) - east of the door.
+        """
+        tiles = np.array(
+            [
+                [MetalTile.WEST_DOOR_NORTH, MetalTile.WEST_WALL],
+                [MetalTile.WEST_DOOR_SOUTH, MetalTile.WEST_WALL],
+            ],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # Both tiles to the right of the door should become FLOOR
+        assert tiles[0, 1] == MetalTile.FLOOR, (
+            f"Expected FLOOR at (0,1), got {MetalTile(tiles[0, 1]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
+
+    def test_east_door_walkable_checks_west(self):
+        """
+        Test that east door walkability is checked to the WEST (into the room).
+
+        An east door is on the east wall, so the room interior is to the west.
+
+        Before:       After:
+        # e  (row 0)  . e
+        # E  (row 1)  . E
+
+        Where e=EAST_DOOR_NORTH, E=EAST_DOOR_SOUTH, #=EAST_WALL, .=FLOOR
+        The walkable check should look at (0, -1) - west of the door.
+        """
+        tiles = np.array(
+            [
+                [MetalTile.EAST_WALL, MetalTile.EAST_DOOR_NORTH],
+                [MetalTile.EAST_WALL, MetalTile.EAST_DOOR_SOUTH],
+            ],
+            dtype=int,
+        )
+
+        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        # Both tiles to the left of the door should become FLOOR
+        assert tiles[0, 0] == MetalTile.FLOOR, (
+            f"Expected FLOOR at (0,0), got {MetalTile(tiles[0, 0]).name}"
+        )
+        assert replacements > 0, "Expected at least one replacement"
