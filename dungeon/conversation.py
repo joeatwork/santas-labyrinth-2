@@ -34,6 +34,8 @@ class ConversationEngine(ABC):
         """Return the first page of conversation."""
         pass
 
+    # TODO: response should be able to consult the level state machine,
+    # rather than the previous page
     @abstractmethod
     def respond(self, previous_page: ConversationPage) -> Optional[ConversationPage]:
         """

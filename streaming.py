@@ -4,7 +4,7 @@ from av.audio.stream import AudioStream
 import subprocess
 import sys
 import numpy as np
-from typing import Optional, IO, Union, cast
+from typing import Optional, cast
 
 
 class FFmpegStreamer:

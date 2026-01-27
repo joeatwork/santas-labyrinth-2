@@ -111,10 +111,6 @@ def bottom_edge_wall(tile):
 # Use metal labyrinth ASCII mapping
 ASCII_TO_TILE = METAL_ASCII_TO_TILE
 
-# Door slot characters (converted to door tiles or walls based on required connections)
-DOOR_SLOT_CHARS = {"n", "N", "s", "S", "w", "W", "e", "E"}
-
-
 @dataclass(frozen=True)
 class Position:
     """A position in the dungeon grid, measured in tiles."""
@@ -234,17 +230,6 @@ def _get_door_position(
 DungeonMap = np.ndarray
 
 
-def generate_foreground_from_dungeon(dungeon_map: DungeonMap) -> DungeonMap:
-    """
-    Generates a foreground map from an existing dungeon map.
-
-    Metal labyrinth tileset does not use doorframe foregrounds,
-    so this returns an empty map.
-    """
-    rows, cols = dungeon_map.shape
-    return np.zeros((rows, cols), dtype=int)
-
-
 def _place_room_on_canvas(
     canvas: np.ndarray,
     template: RoomTemplate,
@@ -317,36 +302,6 @@ def _replace_blind_doors_with_walls(
     Also replaces adjacent convex corners with straight walls to maintain
     visual consistency.
     """
-    # Mapping from door tiles to their corresponding wall tiles
-    door_to_wall = {
-        Tile.NORTH_DOOR_WEST: Tile.NORTH_WALL,
-        Tile.NORTH_DOOR_EAST: Tile.NORTH_WALL,
-        Tile.SOUTH_DOOR_WEST: Tile.SOUTH_WALL,
-        Tile.SOUTH_DOOR_EAST: Tile.SOUTH_WALL,
-        Tile.WEST_DOOR_NORTH: Tile.WEST_WALL,
-        Tile.WEST_DOOR_SOUTH: Tile.WEST_WALL,
-        Tile.EAST_DOOR_NORTH: Tile.EAST_WALL,
-        Tile.EAST_DOOR_SOUTH: Tile.EAST_WALL,
-    }
-
-    # Convex corners that should become walls when adjacent door is removed
-    # Maps (direction, side) -> (convex_corner_tile, wall_replacement)
-    # For north/south doors: side is 'west' (-1 col) or 'east' (+2 col from door start)
-    # For east/west doors: side is 'north' (-1 row) or 'south' (+2 row from door start)
-    convex_to_wall = {
-        Tile.CONVEX_NE: Tile.NORTH_WALL,  # West of north door -> north wall
-        Tile.CONVEX_NW: Tile.NORTH_WALL,  # East of north door -> north wall
-        Tile.CONVEX_SE: Tile.SOUTH_WALL,  # West of south door -> south wall
-        Tile.CONVEX_SW: Tile.SOUTH_WALL,  # East of south door -> south wall
-    }
-
-    # For east/west doors, convex corners become vertical walls
-    convex_to_wall_vertical = {
-        Tile.CONVEX_SE: Tile.WEST_WALL,  # Above west door -> west wall
-        Tile.CONVEX_NE: Tile.WEST_WALL,  # Below west door -> west wall
-        Tile.CONVEX_SW: Tile.EAST_WALL,  # Above east door -> east wall
-        Tile.CONVEX_NW: Tile.EAST_WALL,  # Below east door -> east wall
-    }
 
     # For each room, check its doors
     for room_id, room_position in room_positions.items():

@@ -1,14 +1,7 @@
 """Tests for room template validation."""
 
-import numpy as np
 import pytest
-from dungeon.dungeon_gen import ROOM_TEMPLATES, RoomTemplate
-from dungeon.metal_labyrinth_sprites import (
-    METAL_ASCII_TO_TILE,
-    MetalTile,
-    apply_patterns,
-    ROOM_REPAIR_PATTERNS,
-)
+from dungeon.dungeon_gen import ROOM_TEMPLATES, RoomTemplate, ASCII_TO_TILE, Tile
 
 
 class TestRoomTemplateValidation:
@@ -147,448 +140,111 @@ class TestRoomTemplateValidation:
                         f"found '{above_char}'"
                     )
 
-
-
-class TestTilePatterns:
-    """Tests for ROOM_REPAIR_PATTERNS tile pattern matching and replacement."""
-
-    def test_straight_east_wall_pattern_fixes_middle_tile(self):
-        """
-        Test that the "ensure straight east wall" pattern correctly replaces
-        the middle tile in a vertical run of east walls.
-
-        Before:              After:
-        ]  (EAST_WALL)       ]  (EAST_WALL)
-        -  (NORTH_WALL)  ->  ]  (EAST_WALL)
-        ]  (EAST_WALL)       ]  (EAST_WALL)
-
-        The pattern should replace a misplaced horizontal wall between
-        two vertically adjacent east walls with an east wall.
-        """
-        # Create a 3x1 tile array with east walls and a north wall in the middle
-        # Using: ] = EAST_WALL, - = NORTH_WALL
-        tiles = np.array(
-            [
-                [MetalTile.EAST_WALL],  # row 0: ]
-                [MetalTile.NORTH_WALL],  # row 1: - (wrong, should be ])
-                [MetalTile.EAST_WALL],  # row 2: ]
-            ],
-            dtype=int,
-        )
-
-        # Apply patterns
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # The middle tile should now be EAST_WALL
-        assert tiles[1, 0] == MetalTile.EAST_WALL, (
-            f"Expected EAST_WALL at (1,0), got {MetalTile(tiles[1, 0]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_north_door_halves_are_horizontally_adjacent(self):
-        """
-        Test that north door patterns look for halves side-by-side (same row).
-
-        A north door consists of NORTH_DOOR_WEST and NORTH_DOOR_EAST
-        which are horizontally adjacent (west half on left, east half on right).
-
-        Before:           After:
-        n .  (nN pair)    n N
-        col0 col1         col0 col1
-
-        Where n=NORTH_DOOR_WEST, N=NORTH_DOOR_EAST, .=FLOOR
-        """
-        # Create a 1x2 tile array: NORTH_DOOR_WEST at (0,0), FLOOR at (0,1)
-        tiles = np.array(
-            [[MetalTile.NORTH_DOOR_WEST, MetalTile.FLOOR]],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # The pattern should add NORTH_DOOR_EAST to the right of NORTH_DOOR_WEST
-        assert tiles[0, 1] == MetalTile.NORTH_DOOR_EAST, (
-            f"Expected NORTH_DOOR_EAST at (0,1), got {MetalTile(tiles[0, 1]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_west_door_halves_are_vertically_adjacent(self):
-        """
-        Test that west door patterns look for halves stacked (same column).
-
-        A west door consists of WEST_DOOR_NORTH and WEST_DOOR_SOUTH
-        which are vertically adjacent (north half on top, south half below).
-
-        Before:       After:
-        w  (row 0)    w
-        .  (row 1)    W
-
-        Where w=WEST_DOOR_NORTH, W=WEST_DOOR_SOUTH, .=FLOOR
-        """
-        # Create a 2x1 tile array: WEST_DOOR_NORTH at (0,0), FLOOR at (1,0)
-        tiles = np.array(
-            [
-                [MetalTile.WEST_DOOR_NORTH],
-                [MetalTile.FLOOR],
-            ],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # The pattern should add WEST_DOOR_SOUTH below WEST_DOOR_NORTH
-        assert tiles[1, 0] == MetalTile.WEST_DOOR_SOUTH, (
-            f"Expected WEST_DOOR_SOUTH at (1,0), got {MetalTile(tiles[1, 0]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_north_door_walkable_checks_south(self):
-        """
-        Test that north door walkability is checked to the SOUTH (into the room).
-
-        A north door is on the north wall, so the room interior is to the south.
-
-        Before:           After:
-        n N  (row 0)      n N
-        # #  (row 1)      . .
-
-        Where n=NORTH_DOOR_WEST, N=NORTH_DOOR_EAST, #=NORTH_WALL, .=FLOOR
-        The walkable check should look at (1, 0) - south of the door.
-        """
-        tiles = np.array(
-            [
-                [MetalTile.NORTH_DOOR_WEST, MetalTile.NORTH_DOOR_EAST],
-                [MetalTile.NORTH_WALL, MetalTile.NORTH_WALL],  # Non-walkable below
-            ],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # Both tiles below the door should become FLOOR
-        assert tiles[1, 0] == MetalTile.FLOOR, (
-            f"Expected FLOOR at (1,0), got {MetalTile(tiles[1, 0]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_west_door_walkable_checks_east(self):
-        """
-        Test that west door walkability is checked to the EAST (into the room).
-
-        A west door is on the west wall, so the room interior is to the east.
-
-        Before:       After:
-        w #  (row 0)  w .
-        W #  (row 1)  W .
-
-        Where w=WEST_DOOR_NORTH, W=WEST_DOOR_SOUTH, #=WEST_WALL, .=FLOOR
-        The walkable check should look at (0, 1) - east of the door.
-        """
-        tiles = np.array(
-            [
-                [MetalTile.WEST_DOOR_NORTH, MetalTile.WEST_WALL],
-                [MetalTile.WEST_DOOR_SOUTH, MetalTile.WEST_WALL],
-            ],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # Both tiles to the right of the door should become FLOOR
-        assert tiles[0, 1] == MetalTile.FLOOR, (
-            f"Expected FLOOR at (0,1), got {MetalTile(tiles[0, 1]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_east_door_walkable_checks_west(self):
-        """
-        Test that east door walkability is checked to the WEST (into the room).
-
-        An east door is on the east wall, so the room interior is to the west.
-
-        Before:       After:
-        # e  (row 0)  . e
-        # E  (row 1)  . E
-
-        Where e=EAST_DOOR_NORTH, E=EAST_DOOR_SOUTH, #=EAST_WALL, .=FLOOR
-        The walkable check should look at (0, -1) - west of the door.
-        """
-        tiles = np.array(
-            [
-                [MetalTile.EAST_WALL, MetalTile.EAST_DOOR_NORTH],
-                [MetalTile.EAST_WALL, MetalTile.EAST_DOOR_SOUTH],
-            ],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # Both tiles to the left of the door should become FLOOR
-        assert tiles[0, 0] == MetalTile.FLOOR, (
-            f"Expected FLOOR at (0,0), got {MetalTile(tiles[0, 0]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_north_door_boundary_corners_left_and_right(self):
-        """
-        Test that north door boundary patterns place corners to LEFT and RIGHT.
-
-        NORTH_DOOR_WEST needs CONVEX_NE to the LEFT (0, -1)
-        NORTH_DOOR_EAST needs CONVEX_NW to the RIGHT (0, 1)
-
-        Before:            After:
-        . n N .  (row 0)   ! n N ^
-
-        Where n=NORTH_DOOR_WEST, N=NORTH_DOOR_EAST,
-              !=CONVEX_NE, ^=CONVEX_NW, .=FLOOR
-        """
-        tiles = np.array(
-            [[MetalTile.FLOOR, MetalTile.NORTH_DOOR_WEST, MetalTile.NORTH_DOOR_EAST, MetalTile.FLOOR]],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # Left of NORTH_DOOR_WEST should be CONVEX_NE
-        assert tiles[0, 0] == MetalTile.CONVEX_NE, (
-            f"Expected CONVEX_NE at (0,0), got {MetalTile(tiles[0, 0]).name}"
-        )
-        # Right of NORTH_DOOR_EAST should be CONVEX_NW
-        assert tiles[0, 3] == MetalTile.CONVEX_NW, (
-            f"Expected CONVEX_NW at (0,3), got {MetalTile(tiles[0, 3]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_west_door_boundary_corners_above_and_below(self):
-        """
-        Test that west door boundary patterns place corners ABOVE and BELOW.
-
-        WEST_DOOR_NORTH needs CONVEX_SE ABOVE (-1, 0)
-        WEST_DOOR_SOUTH needs CONVEX_NE BELOW (1, 0)
-
-        Before:       After:
-        .  (row 0)    `  (CONVEX_SE)
-        w  (row 1)    w
-        W  (row 2)    W
-        .  (row 3)    !  (CONVEX_NE)
-
-        Where w=WEST_DOOR_NORTH, W=WEST_DOOR_SOUTH,
-              `=CONVEX_SE, !=CONVEX_NE, .=FLOOR
-        """
-        tiles = np.array(
-            [
-                [MetalTile.FLOOR],
-                [MetalTile.WEST_DOOR_NORTH],
-                [MetalTile.WEST_DOOR_SOUTH],
-                [MetalTile.FLOOR],
-            ],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # Above WEST_DOOR_NORTH should be CONVEX_SE
-        assert tiles[0, 0] == MetalTile.CONVEX_SE, (
-            f"Expected CONVEX_SE at (0,0), got {MetalTile(tiles[0, 0]).name}"
-        )
-        # Below WEST_DOOR_SOUTH should be CONVEX_NE
-        assert tiles[3, 0] == MetalTile.CONVEX_NE, (
-            f"Expected CONVEX_NE at (3,0), got {MetalTile(tiles[3, 0]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_east_door_boundary_corners_above_and_below(self):
-        """
-        Test that east door boundary patterns place corners ABOVE and BELOW.
-
-        EAST_DOOR_NORTH needs CONVEX_SW ABOVE (-1, 0)
-        EAST_DOOR_SOUTH needs CONVEX_NW BELOW (1, 0)
-
-        Before:       After:
-        .  (row 0)    ~  (CONVEX_SW)
-        e  (row 1)    e
-        E  (row 2)    E
-        .  (row 3)    ^  (CONVEX_NW)
-
-        Where e=EAST_DOOR_NORTH, E=EAST_DOOR_SOUTH,
-              ~=CONVEX_SW, ^=CONVEX_NW, .=FLOOR
-        """
-        tiles = np.array(
-            [
-                [MetalTile.FLOOR],
-                [MetalTile.EAST_DOOR_NORTH],
-                [MetalTile.EAST_DOOR_SOUTH],
-                [MetalTile.FLOOR],
-            ],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # Above EAST_DOOR_NORTH should be CONVEX_SW
-        assert tiles[0, 0] == MetalTile.CONVEX_SW, (
-            f"Expected CONVEX_SW at (0,0), got {MetalTile(tiles[0, 0]).name}"
-        )
-        # Below EAST_DOOR_SOUTH should be CONVEX_NW
-        assert tiles[3, 0] == MetalTile.CONVEX_NW, (
-            f"Expected CONVEX_NW at (3,0), got {MetalTile(tiles[3, 0]).name}"
-        )
-        assert replacements > 0, "Expected at least one replacement"
-
-    def test_convex_ne_not_replaced_when_west_wall_to_left(self):
-        """
-        CONVEX_NE should NOT become WEST_WALL when there's a west wall to its LEFT.
-
-        West walls run north-south. A west wall to the LEFT of CONVEX_NE
-        doesn't continue into CONVEX_NE - that would be going INTO the room.
-
-            col0  col1
-            [     !      ([ = WEST_WALL, ! = CONVEX_NE)
-
-        The CONVEX_NE should remain unchanged (the pattern should not fire).
-        """
-        tiles = np.array(
-            [[MetalTile.WEST_WALL, MetalTile.CONVEX_NE]],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # CONVEX_NE should NOT be replaced - it stays as CONVEX_NE
-        assert tiles[0, 1] == MetalTile.CONVEX_NE, (
-            f"CONVEX_NE should not be replaced when west wall is to the left, "
-            f"got {MetalTile(tiles[0, 1]).name}"
-        )
-
-    def test_sw_corner_placed_between_east_and_north_walls(self):
-        """
-        Test that SW_CORNER is placed where an east wall meets a north wall.
-
-        Previously there was a conflicting CONVEX_SW pattern with identical
-        match conditions that would also fire, producing invalid tiling.
-        That pattern has been removed.
-
-            col0  col1
-        row0:  ]    .     (] = EAST_WALL going south)
-        row1:  ?    -     (- = NORTH_WALL going west, ? = where SW_CORNER goes)
-
-        After: SW_CORNER at (1,0) connecting the walls.
-        """
-        tiles = np.array(
-            [
-                [MetalTile.EAST_WALL, MetalTile.FLOOR],
-                [MetalTile.FLOOR, MetalTile.NORTH_WALL],
-            ],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # SW_CORNER should be placed at (1,0)
-        assert tiles[1, 0] == MetalTile.SW_CORNER, (
-            f"Expected SW_CORNER at (1,0), got {MetalTile(tiles[1, 0]).name}"
-        )
-        # FLOOR at (0,1) should remain unchanged (no conflicting CONVEX_SW)
-        assert tiles[0, 1] == MetalTile.FLOOR, (
-            f"Expected FLOOR at (0,1) unchanged, got {MetalTile(tiles[0, 1]).name}"
-        )
-
-    def test_se_corner_placed_between_south_and_east_walls(self):
-        """
-        Test that SE_CORNER is placed where south wall meets east wall.
-
-        SE_CORNER is the southeast corner of a room:
-        - SOUTH_WALL to its west (left)
-        - EAST_WALL to its north (above)
-
-                col0  col1
-        row0:   ?     ]     (] = EAST_WALL going south)
-        row1:   _     ?     (_ = SOUTH_WALL going east, ? = SE_CORNER)
-
-        After: SE_CORNER at (1,1) connecting the walls.
-        """
-        tiles = np.array(
-            [
-                [MetalTile.FLOOR, MetalTile.EAST_WALL],
-                [MetalTile.SOUTH_WALL, MetalTile.FLOOR],
-            ],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # SE_CORNER should be placed at (1,1)
-        assert tiles[1, 1] == MetalTile.SE_CORNER, (
-            f"Expected SE_CORNER at (1,1), got {MetalTile(tiles[1, 1]).name}"
-        )
-
-    def test_orphaned_north_wall_base_cleaned_up(self):
-        """
-        Test that orphaned NORTH_WALL_BASE (without NORTH_WALL above) is
-        replaced with FLOOR by the pattern.
-
-        Before:       After:
-        .  (FLOOR)    .
-        ,  (BASE)     .  (orphaned base becomes FLOOR)
-        """
-        tiles = np.array(
-            [
-                [MetalTile.FLOOR],
-                [MetalTile.NORTH_WALL_BASE],
-            ],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        assert tiles[1, 0] == MetalTile.FLOOR, (
-            f"Expected orphaned base to become FLOOR, got {MetalTile(tiles[1, 0]).name}"
-        )
-
-    def test_valid_north_wall_base_not_removed(self):
-        """
-        Test that NORTH_WALL_BASE with NORTH_WALL above is NOT removed.
-
-        Before:       After (unchanged):
-        -  (NORTH_WALL)    -
-        ,  (BASE)          ,
-        """
-        tiles = np.array(
-            [
-                [MetalTile.NORTH_WALL],
-                [MetalTile.NORTH_WALL_BASE],
-            ],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        assert tiles[1, 0] == MetalTile.NORTH_WALL_BASE, (
-            f"Expected base to remain, got {MetalTile(tiles[1, 0]).name}"
-        )
-
-    def test_north_wall_base_below_west_wall_is_removed(self):
-        """
-        Test that NORTH_WALL_BASE below WEST_WALL IS removed.
-
-        NORTH_WALL_BASE is only valid below NORTH_WALL, NW_CORNER, NE_CORNER.
-        Below WEST_WALL it should be cleaned up to FLOOR.
-
-        Before:       After:
-        [  (WEST_WALL)    [
-        ,  (BASE)         .  (FLOOR)
-        """
-        tiles = np.array(
-            [
-                [MetalTile.WEST_WALL],
-                [MetalTile.NORTH_WALL_BASE],
-            ],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        assert tiles[1, 0] == MetalTile.FLOOR, (
-            f"Expected orphaned base below WEST_WALL to become FLOOR, got {MetalTile(tiles[1, 0]).name}"
-        )
-
+    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
+    def test_north_wall_tiles_have_base_below(self, template: RoomTemplate):
+        """North wall tiles must have NORTH_WALL_BASE tiles directly below them."""
+        lines = template.ascii_art
+        north_wall_tiles = {"-"}  # NORTH_WALL
+
+        for row_idx, line in enumerate(lines):
+            for col_idx, char in enumerate(line):
+                if char in north_wall_tiles:
+                    # Must have a row below
+                    assert row_idx + 1 < len(lines), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'{char}' on last row, missing base tile below"
+                    )
+                    next_line = lines[row_idx + 1]
+                    assert col_idx < len(next_line), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'{char}' has no character below"
+                    )
+                    below_char = next_line[col_idx]
+
+                    # The tile below must be a NORTH_WALL_BASE (,)
+                    tile_below = ASCII_TO_TILE.get(below_char)
+                    assert tile_below == Tile.NORTH_WALL_BASE, (
+                        f"Template '{template.name}' row {row_idx}, col {col_idx}: "
+                        f"'{char}' must have ',' (NORTH_WALL_BASE) below, found '{below_char}'"
+                    )
+
+    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
+    def test_pillar_tiles_have_base_below(self, template: RoomTemplate):
+        """PILLAR tiles must have PILLAR_BASE tiles directly below them."""
+        lines = template.ascii_art
+
+        for row_idx, line in enumerate(lines):
+            for col_idx, char in enumerate(line):
+                if char == "P":  # PILLAR
+                    # Must have a row below
+                    assert row_idx + 1 < len(lines), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'P' (PILLAR) on last row, missing base tile below"
+                    )
+                    next_line = lines[row_idx + 1]
+                    assert col_idx < len(next_line), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'P' (PILLAR) has no character below"
+                    )
+                    below_char = next_line[col_idx]
+
+                    # The tile below must be a PILLAR_BASE (;)
+                    tile_below = ASCII_TO_TILE.get(below_char)
+                    assert tile_below == Tile.PILLAR_BASE, (
+                        f"Template '{template.name}' row {row_idx}, col {col_idx}: "
+                        f"'P' (PILLAR) must have ';' (PILLAR_BASE) below, found '{below_char}'"
+                    )
+
+    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
+    def test_convex_se_tiles_have_base_below(self, template: RoomTemplate):
+        """CONVEX_SE tiles must have CONVEX_SE_BASE tiles directly below them."""
+        lines = template.ascii_art
+
+        for row_idx, line in enumerate(lines):
+            for col_idx, char in enumerate(line):
+                if char == "`":  # CONVEX_SE
+                    # Must have a row below
+                    assert row_idx + 1 < len(lines), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'`' (CONVEX_SE) on last row, missing base tile below"
+                    )
+                    next_line = lines[row_idx + 1]
+                    assert col_idx < len(next_line), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'`' (CONVEX_SE) has no character below"
+                    )
+                    below_char = next_line[col_idx]
+
+                    # The tile below must be a CONVEX_SE_BASE (>)
+                    tile_below = ASCII_TO_TILE.get(below_char)
+                    assert tile_below in [Tile.CONVEX_SE_BASE, Tile.WEST_DOOR_NORTH], (
+                        f"Template '{template.name}' row {row_idx}, col {col_idx}: "
+                        f"'`' (CONVEX_SE) must have '>' (CONVEX_SE_BASE) below, found '{below_char}'"
+                    )
+
+    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
+    def test_convex_sw_tiles_have_base_below(self, template: RoomTemplate):
+        """CONVEX_SW tiles must have CONVEX_SW_BASE tiles directly below them."""
+        lines = template.ascii_art
+
+        for row_idx, line in enumerate(lines):
+            for col_idx, char in enumerate(line):
+                if char == "~":  # CONVEX_SW
+                    # Must have a row below
+                    assert row_idx + 1 < len(lines), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'~' (CONVEX_SW) on last row, missing base tile below"
+                    )
+                    next_line = lines[row_idx + 1]
+                    assert col_idx < len(next_line), (
+                        f"Template '{template.name}' row {row_idx}: "
+                        f"'~' (CONVEX_SW) has no character below"
+                    )
+                    below_char = next_line[col_idx]
+
+                    # The tile below must be a CONVEX_SW_BASE (<)
+                    tile_below = ASCII_TO_TILE.get(below_char)
+                    assert tile_below in [Tile.CONVEX_SW_BASE, Tile.EAST_DOOR_NORTH], (
+                        f"Template '{template.name}' row {row_idx}, col {col_idx}: "
+                        f"'~' (CONVEX_SW) must have '<' (CONVEX_SW_BASE) below, found '{below_char}'"
+                    )

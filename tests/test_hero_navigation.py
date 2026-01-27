@@ -83,21 +83,9 @@ class MockDungeon:
         self.npcs.append(goal_npc)
         self._goal_position = (goal_npc.x, goal_npc.y)
 
-    def mark_corridor_tile(self, tile_row: int, tile_col: int, adjacent_room_id: int) -> None:
-        """Mark a tile as part of a corridor (not belonging to any room)."""
-        # Corridor tiles are mapped to an adjacent room for pathfinding purposes
-        self._tile_to_room[(tile_row, tile_col)] = adjacent_room_id
-
     def add_pillar(self, tile_row: int, tile_col: int) -> None:
         """Place a single pillar obstacle at the given tile."""
         self.map[tile_row, tile_col] = Tile.PILLAR
-
-    def add_big_pillar(self, tile_row: int, tile_col: int) -> None:
-        """Place a 2x2 convex corner block (big pillar) with top-left at given tile."""
-        self.map[tile_row, tile_col] = Tile.NW_CONVEX_CORNER
-        self.map[tile_row, tile_col + 1] = Tile.NE_CONVEX_CORNER
-        self.map[tile_row + 1, tile_col] = Tile.SW_CONVEX_CORNER
-        self.map[tile_row + 1, tile_col + 1] = Tile.SE_CONVEX_CORNER
 
     def add_door(self, room_row: int, room_col: int, direction: int) -> None:
         """

@@ -29,16 +29,16 @@ class MetalTile(IntEnum):
     # Walls (non-walkable)
     # Walls are named for the side of the room they are on,
     # so a WEST_WALL is on the west side of a room, facing east.
-    NORTH_WALL = 10 # wall along the top of a room
-    SOUTH_WALL = 11 # wall along the bottom of a room
+    NORTH_WALL = 10  # wall along the top of a room
+    SOUTH_WALL = 11  # wall along the bottom of a room
     WEST_WALL = 12  # the left-most wall of a room
-    EAST_WALL = 13. # the right-most wall of a room
+    EAST_WALL = 13  # the right-most wall of a room
 
     # Corners (non-walkable)
-    NW_CORNER = 20 # the joint between a west wall and a north wall
-    NE_CORNER = 21 # the joint between a north wall and an east wall
-    SW_CORNER = 22 # the joint between a west wall and a south wall
-    SE_CORNER = 23 # the joint between a south wall and an east wall
+    NW_CORNER = 20  # the joint between a west wall and a north wall
+    NE_CORNER = 21  # the joint between a north wall and an east wall
+    SW_CORNER = 22  # the joint between a west wall and a south wall
+    SE_CORNER = 23  # the joint between a south wall and an east wall
 
     # Convex corners for interior cutouts (non-walkable)
     # Convex corners are named for the direction they point,
@@ -63,6 +63,7 @@ class MetalTile(IntEnum):
     WEST_DOOR_SOUTH = 55
     EAST_DOOR_NORTH = 56
     EAST_DOOR_SOUTH = 57
+
 
 # ASCII Art Dialect for Metal Labyrinth Rooms
 # ============================================
@@ -170,32 +171,66 @@ METAL_ASCII_TO_TILE: Dict[str, MetalTile] = {
     "E": MetalTile.EAST_DOOR_SOUTH,
 }
 
-# Tiles that require a specific "base" tile directly below them
-TILES_REQUIRING_BASE: Dict[MetalTile, MetalTile] = {
-    MetalTile.NORTH_WALL: MetalTile.NORTH_WALL_BASE,
-    MetalTile.NW_CORNER: MetalTile.NORTH_WALL_BASE,
-    MetalTile.NE_CORNER: MetalTile.NORTH_WALL_BASE,
-    MetalTile.PILLAR: MetalTile.PILLAR_BASE,
-    MetalTile.CONVEX_SW: MetalTile.CONVEX_SW_BASE,
-    MetalTile.CONVEX_SE: MetalTile.CONVEX_SE_BASE,
+# Reverse mapping from MetalTile IDs to ASCII characters
+# Kept in sync with METAL_ASCII_TO_TILE for ASCII rendering
+TILE_TO_ASCII: Dict[MetalTile, str] = {
+    MetalTile.NOTHING: " ",
+    # Corners
+    MetalTile.NW_CORNER: "1",
+    MetalTile.NE_CORNER: "2",
+    MetalTile.SW_CORNER: "3",
+    MetalTile.SE_CORNER: "4",
+    # Walls
+    MetalTile.NORTH_WALL: "-",
+    MetalTile.SOUTH_WALL: "_",
+    MetalTile.WEST_WALL: "[",
+    MetalTile.EAST_WALL: "]",
+    # Floor tiles
+    MetalTile.FLOOR: ".",
+    MetalTile.NORTH_WALL_BASE: ",",
+    MetalTile.PILLAR_BASE: ";",
+    MetalTile.CONVEX_SW_BASE: "<",
+    MetalTile.CONVEX_SE_BASE: ">",
+    # Convex corners
+    MetalTile.CONVEX_NW: "^",
+    MetalTile.CONVEX_NE: "!",
+    MetalTile.CONVEX_SW: "~",
+    MetalTile.CONVEX_SE: "`",
+    # Pillar
+    MetalTile.PILLAR: "P",
+    # Doors
+    MetalTile.NORTH_DOOR_WEST: "n",
+    MetalTile.NORTH_DOOR_EAST: "N",
+    MetalTile.SOUTH_DOOR_WEST: "s",
+    MetalTile.SOUTH_DOOR_EAST: "S",
+    MetalTile.WEST_DOOR_NORTH: "w",
+    MetalTile.WEST_DOOR_SOUTH: "W",
+    MetalTile.EAST_DOOR_NORTH: "e",
+    MetalTile.EAST_DOOR_SOUTH: "E",
 }
 
-# Base tiles and the tiles that should be directly above them
-# This is used to detect orphaned base tiles
-# Note: NORTH_WALL_BASE can also be below CONVEX_SW/CONVEX_SE when they're
-# part of the north wall row (adjacent to doors)
-BASE_TILES_EXPECTED_ABOVE: Dict[MetalTile, set] = {
-    MetalTile.NORTH_WALL_BASE: {
-        MetalTile.NORTH_WALL,
-        MetalTile.NW_CORNER,
-        MetalTile.NE_CORNER,
-        MetalTile.CONVEX_SW,
-        MetalTile.CONVEX_SE,  # When part of north wall row
-    },
-    MetalTile.PILLAR_BASE: {MetalTile.PILLAR},
-    MetalTile.CONVEX_SW_BASE: {MetalTile.CONVEX_SW},
-    MetalTile.CONVEX_SE_BASE: {MetalTile.CONVEX_SE},
-}
+
+def render_dungeon_ascii(dungeon_map) -> str:
+    """
+    Convert a dungeon map (numpy array of MetalTile values) to ASCII string.
+
+    Args:
+        dungeon_map: 2D numpy array of MetalTile values
+
+    Returns:
+        ASCII art representation of the dungeon
+    """
+    lines = []
+    rows, cols = dungeon_map.shape
+    for row in range(rows):
+        line = ""
+        for col in range(cols):
+            tile = dungeon_map[row, col]
+            char = TILE_TO_ASCII.get(tile, "?")
+            line += char
+        lines.append(line)
+    return "\n".join(lines)
+
 
 # Walkable tiles (for pathfinding/collision)
 WALKABLE_TILES = {
@@ -214,10 +249,6 @@ WALKABLE_TILES = {
     MetalTile.EAST_DOOR_SOUTH,
 }
 
-# Door slot characters (for detecting doors in templates)
-METAL_DOOR_CHARS = {"n", "N", "s", "S", "w", "W", "e", "E"}
-
-
 @dataclass
 class ParseError:
     """Error found during ASCII art parsing."""
@@ -225,501 +256,6 @@ class ParseError:
     row: int
     column: int
     message: str
-
-
-import numpy as np
-
-
-class MatchOneTile(Protocol):
-    def matches(self, tile: MetalTile) -> bool: ...
-
-
-class _Y(MatchOneTile):
-    def __init__(self, *tiles: MetalTile):
-        self.set = set(tiles)
-
-    def matches(self, tile):
-        return tile in self.set
-
-    def __repr__(self):
-        return f"_Y({repr(self.set)})"
-
-
-# Note that things outside of the bounds of the dungeon look like NOTHING,
-# which means if you have a negative match you may need to take NOTHING into account.
-class _N(MatchOneTile):
-    def __init__(self, *tiles: MetalTile):
-        self.set = set(tiles)
-
-    def matches(self, tile):
-        return tile not in self.set
-
-    def __repr__(self):
-        return f"_N({repr(self.set)})"
-
-
-class _Any(MatchOneTile):
-    def __init__(self, *matchers: MatchOneTile):
-        self.matchers = list(matchers)
-
-    def matches(self, tile):
-        for m in self.matchers:
-            if m.matches(tile):
-                return True
-
-        return False
-
-    def __repr__(self):
-        return f"_Any({repr(self.matchers)})"
-
-
-@dataclass
-class TilePattern:
-    @dataclass
-    class Illustration:
-        """
-        A minimal ASCII art example of the sort of cases
-        addressed by the pattern
-        """
-
-        before: List[str]
-        after: List[str]
-
-    """
-    A pattern to match and replace tiles.
-
-    Patterns are defined as a list of (row_offset, col_offset, match_tiles) tuples.
-    If all positions match their respective tile sets, the replacement is applied.
-
-    The replacement is a list of (row_offset, col_offset, new_tile) tuples.
-    """
-
-    match: List[
-        Tuple[int, int, MatchOneTile]
-    ]  # [(row_off, col_off, {tiles to match}), ...]
-    replace: List[Tuple[int, int, MetalTile]]  # [(row_off, col_off, new_tile), ...]
-    illustration: Optional[Illustration] = None
-
-
-# Define tile sets for pattern matching
-HORIZONTAL_WALLS = _Y(MetalTile.NORTH_WALL, MetalTile.SOUTH_WALL)
-VERTICAL_WALLS = _Y(MetalTile.WEST_WALL, MetalTile.EAST_WALL)
-ALL_WALLS = _Any(HORIZONTAL_WALLS, VERTICAL_WALLS)
-ALL_CORNERS = _Y(
-    MetalTile.NW_CORNER, MetalTile.NE_CORNER, MetalTile.SW_CORNER, MetalTile.SE_CORNER
-)
-
-# Corners can be substituted for walls in some circumstances
-# WESTERN_EDGE_NORTH_WALL is a tile which has a north wall running out of the western edge of the tile
-WESTERN_EDGE_NORTH_WALL = _Y(
-    MetalTile.NORTH_WALL, MetalTile.NE_CORNER, MetalTile.CONVEX_SE
-)
-EASTERN_EDGE_NORTH_WALL = _Y(
-    MetalTile.NORTH_WALL, MetalTile.NW_CORNER, MetalTile.CONVEX_SW
-)
-
-WESTERN_EDGE_SOUTH_WALL = _Y(
-    MetalTile.SOUTH_WALL, MetalTile.SE_CORNER, MetalTile.CONVEX_NE
-)
-EASTERN_EDGE_SOUTH_WALL = _Y(
-    MetalTile.SOUTH_WALL, MetalTile.SW_CORNER, MetalTile.CONVEX_NW
-)
-
-NORTHERN_EDGE_WEST_WALL = _Y(
-    MetalTile.WEST_WALL, MetalTile.SW_CORNER, MetalTile.CONVEX_SE
-)
-SOUTHERN_EDGE_WEST_WALL = _Y(
-    MetalTile.WEST_WALL, MetalTile.NW_CORNER, MetalTile.CONVEX_NE
-)
-
-NORTHERN_EDGE_EAST_WALL = _Y(
-    MetalTile.EAST_WALL, MetalTile.SE_CORNER, MetalTile.CONVEX_SW
-)
-SOUTHERN_EDGE_EAST_WALL = _Y(
-    MetalTile.EAST_WALL, MetalTile.NE_CORNER, MetalTile.CONVEX_NW
-)
-
-# TODO: Each of these cases needs a clear, minimal
-# test case with before and after ASCII art. Then
-# add a test that verifies every illustration
-ROOM_REPAIR_PATTERNS: List[TilePattern] = [
-    # Ensure straight walls
-    TilePattern(
-        match=[
-            (0, 0, EASTERN_EDGE_NORTH_WALL),
-            (0, 1, ALL_WALLS),
-            (0, 2, WESTERN_EDGE_NORTH_WALL),
-        ],
-        replace=[(0, 1, MetalTile.NORTH_WALL)],
-        illustration=TilePattern.Illustration(before=["-]-"], after=["---"]),
-    ),
-    TilePattern(
-        match=[
-            (0, 0, EASTERN_EDGE_SOUTH_WALL),
-            (0, 1, ALL_WALLS),
-            (0, 2, WESTERN_EDGE_SOUTH_WALL),
-        ],
-        replace=[(0, 1, MetalTile.SOUTH_WALL)],
-        illustration=TilePattern.Illustration(before=["_[_"], after=["___"]),
-    ),
-    TilePattern(
-        match=[
-            (0, 0, SOUTHERN_EDGE_WEST_WALL),
-            (1, 0, ALL_WALLS),
-            (2, 0, NORTHERN_EDGE_WEST_WALL),
-        ],
-        replace=[(1, 0, MetalTile.WEST_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["[", "-", "["], after=["[", "[", "["]
-        ),
-    ),
-    TilePattern(
-        match=[
-            (0, 0, SOUTHERN_EDGE_EAST_WALL),
-            (1, 0, ALL_WALLS),
-            (2, 0, NORTHERN_EDGE_EAST_WALL),
-        ],
-        replace=[(1, 0, MetalTile.EAST_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["]", "-", "]"],
-            after=["]", "]", "]"],
-        ),
-    ),
-    # Turn useless convex corners into contiguous walls
-    # For example, CONVEX_SE has a north wall on it's southern edge and
-    # a west wall wall along it's eastern edge, so
-    # it's useless if it abuts another tile to the east with a north wall
-    # or another tile to the south with a west wall.
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.CONVEX_SE)), (0, 1, WESTERN_EDGE_NORTH_WALL)],
-        replace=[(0, 0, MetalTile.NORTH_WALL)],
-        illustration=TilePattern.Illustration(before=["`-"], after=["--"]),
-    ),
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.CONVEX_SE)), (1, 0, NORTHERN_EDGE_WEST_WALL)],
-        replace=[(0, 0, MetalTile.WEST_WALL)],
-        illustration=TilePattern.Illustration(before=["`", "["], after=["[", "["]),
-    ),
-    TilePattern(
-        match=[(0, 0, EASTERN_EDGE_NORTH_WALL), (1, 0, _Y(MetalTile.CONVEX_SW))],
-        replace=[(0, 1, MetalTile.NORTH_WALL)],
-        illustration=TilePattern.Illustration(before=["-~"], after=["--"]),
-    ),
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.CONVEX_SW)), (0, 1, NORTHERN_EDGE_EAST_WALL)],
-        replace=[(0, 0, MetalTile.EAST_WALL)],
-        illustration=TilePattern.Illustration(before=["~", "]"], after=["]", "]"]),
-    ),
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.CONVEX_NE)), (1, 0, WESTERN_EDGE_SOUTH_WALL)],
-        replace=[(0, 0, MetalTile.SOUTH_WALL)],
-        illustration=TilePattern.Illustration(before=["!_"], after=["__"]),
-    ),
-    TilePattern(
-        match=[(0, 0, SOUTHERN_EDGE_WEST_WALL), (0, 1, _Y(MetalTile.CONVEX_NE))],
-        replace=[(0, 0, MetalTile.WEST_WALL)],
-        illustration=TilePattern.Illustration(before=["[", "!"], after=["[", "["]),
-    ),
-    TilePattern(
-        match=[(0, 0, EASTERN_EDGE_SOUTH_WALL), (0, 0, _Y(MetalTile.CONVEX_NW))],
-        replace=[(1, 0, MetalTile.SOUTH_WALL)],
-        illustration=TilePattern.Illustration(before=["_^"], after=["__"]),
-    ),
-    TilePattern(
-        match=[(0, 0, SOUTHERN_EDGE_EAST_WALL), (0, 1, _Y(MetalTile.CONVEX_NW))],
-        replace=[(0, 1, MetalTile.EAST_WALL)],
-        illustration=TilePattern.Illustration(before=["[", "^"], after=["[", "["]),
-    ),
-    # Ensure bases where needed
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.NORTH_WALL)),
-            (
-                1,
-                0,
-                _N(
-                    MetalTile.NORTH_WALL_BASE,
-                    MetalTile.WEST_DOOR_NORTH,
-                    MetalTile.EAST_DOOR_NORTH,
-                ),
-            ),
-        ],
-        replace=[(1, 0, MetalTile.NORTH_WALL_BASE)],
-    ),
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.PILLAR)), (1, 0, _N(MetalTile.PILLAR_BASE))],
-        replace=[(1, 0, MetalTile.PILLAR_BASE)],
-    ),
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.CONVEX_SE)), (1, 0, _N(MetalTile.CONVEX_SE_BASE))],
-        replace=[(1, 0, MetalTile.CONVEX_SE_BASE)],
-    ),
-    TilePattern(
-        match=[(0, 0, _Y(MetalTile.CONVEX_SW)), (1, 0, _N(MetalTile.CONVEX_SW_BASE))],
-        replace=[(1, 0, MetalTile.CONVEX_SW_BASE)],
-    ),
-    # Clean up weird bases
-    TilePattern(
-        match=[(0, 0, _N(MetalTile.NORTH_WALL)), (1, 0, _Y(MetalTile.NORTH_WALL_BASE))],
-        replace=[(1, 0, MetalTile.FLOOR)],
-    ),
-    TilePattern(
-        match=[(0, 0, _N(MetalTile.PILLAR)), (1, 0, _Y(MetalTile.PILLAR_BASE))],
-        replace=[(1, 0, MetalTile.FLOOR)],
-    ),
-    TilePattern(
-        match=[(0, 0, _N(MetalTile.CONVEX_SE)), (1, 0, _Y(MetalTile.CONVEX_SE_BASE))],
-        replace=[(1, 0, MetalTile.FLOOR)],
-    ),
-    TilePattern(
-        match=[(0, 0, _N(MetalTile.CONVEX_SW)), (1, 0, _Y(MetalTile.CONVEX_SW_BASE))],
-        replace=[(1, 0, MetalTile.FLOOR)],
-    ),
-    # Place corners between cornered walls
-    # So the NW corner should go between an west wall and a north wall
-    TilePattern(
-        match=[(0, 1, WESTERN_EDGE_SOUTH_WALL), (1, 0, NORTHERN_EDGE_EAST_WALL)],
-        replace=[(0, 0, MetalTile.NW_CORNER)],
-    ),
-    TilePattern(
-        match=[(0, 0, EASTERN_EDGE_SOUTH_WALL), (1, 1, NORTHERN_EDGE_WEST_WALL)],
-        replace=[(0, 1, MetalTile.NE_CORNER)],
-    ),
-    TilePattern(
-        match=[(0, 0, SOUTHERN_EDGE_EAST_WALL), (1, 1, WESTERN_EDGE_NORTH_WALL)],
-        replace=[(1, 0, MetalTile.SW_CORNER)],
-    ),
-    TilePattern(
-        # SE_CORNER: SOUTH_WALL to the left (west), EAST_WALL above (north)
-        match=[(0, 0, WESTERN_EDGE_SOUTH_WALL), (-1, 1, SOUTHERN_EDGE_EAST_WALL)],
-        replace=[(0, 1, MetalTile.SE_CORNER)],
-    ),
-    # Note: Convex corners are placed by door boundary patterns below.
-    # Previously there were patterns here that conflicted with the regular
-    # corner patterns above (same match conditions, different replacements).
-    # Those have been removed.
-    # Ensure well formed doors
-    # North/South doors are horizontally adjacent: WEST half at (0,0), EAST half at (0,1)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.NORTH_DOOR_WEST)),
-            (0, 1, _N(MetalTile.NORTH_DOOR_EAST)),
-        ],
-        replace=[(0, 1, MetalTile.NORTH_DOOR_EAST)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _N(MetalTile.NORTH_DOOR_WEST)),
-            (0, 1, _Y(MetalTile.NORTH_DOOR_EAST)),
-        ],
-        replace=[(0, 0, MetalTile.NORTH_DOOR_WEST)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_WEST)),
-            (0, 1, _N(MetalTile.SOUTH_DOOR_EAST)),
-        ],
-        replace=[(0, 1, MetalTile.SOUTH_DOOR_EAST)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _N(MetalTile.SOUTH_DOOR_WEST)),
-            (0, 1, _Y(MetalTile.SOUTH_DOOR_EAST)),
-        ],
-        replace=[(0, 0, MetalTile.SOUTH_DOOR_WEST)],
-    ),
-    # West/East doors are vertically adjacent: NORTH half at (0,0), SOUTH half at (1,0)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH)),
-            (1, 0, _N(MetalTile.WEST_DOOR_SOUTH)),
-        ],
-        replace=[(1, 0, MetalTile.WEST_DOOR_SOUTH)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _N(MetalTile.WEST_DOOR_NORTH)),
-            (1, 0, _Y(MetalTile.WEST_DOOR_SOUTH)),
-        ],
-        replace=[(0, 0, MetalTile.WEST_DOOR_NORTH)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.EAST_DOOR_NORTH)),
-            (1, 0, _N(MetalTile.EAST_DOOR_SOUTH)),
-        ],
-        replace=[(1, 0, MetalTile.EAST_DOOR_SOUTH)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _N(MetalTile.EAST_DOOR_NORTH)),
-            (1, 0, _Y(MetalTile.EAST_DOOR_SOUTH)),
-        ],
-        replace=[(0, 0, MetalTile.EAST_DOOR_NORTH)],
-    ),
-    # Ensure walkable doors
-    # Each door needs walkable space on the interior side (facing into the room)
-    # North door: walkable to the SOUTH (1, 0)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.NORTH_DOOR_EAST, MetalTile.NORTH_DOOR_WEST)),
-            (1, 0, _N(*WALKABLE_TILES)),
-        ],
-        replace=[(1, 0, MetalTile.FLOOR)],
-    ),
-    # South door: walkable to the NORTH (-1, 0)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_EAST, MetalTile.SOUTH_DOOR_WEST)),
-            (-1, 0, _N(*WALKABLE_TILES)),
-        ],
-        replace=[(-1, 0, MetalTile.FLOOR)],
-    ),
-    # West door: walkable to the EAST (0, 1)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH, MetalTile.WEST_DOOR_SOUTH)),
-            (0, 1, _N(*WALKABLE_TILES)),
-        ],
-        replace=[(0, 1, MetalTile.FLOOR)],
-    ),
-    # East door: walkable to the WEST (0, -1)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.EAST_DOOR_NORTH, MetalTile.EAST_DOOR_SOUTH)),
-            (0, -1, _N(*WALKABLE_TILES)),
-        ],
-        replace=[(0, -1, MetalTile.FLOOR)],
-    ),
-    # Ensure door boundaries
-    # Each door half needs a convex corner at the appropriate position.
-    # Based on check_valid_tiling requirements:
-    #
-    # North/South doors are horizontal, need corners to LEFT and RIGHT:
-    #   NORTH_DOOR_WEST needs CONVEX_NE to the LEFT (0, -1)
-    #   NORTH_DOOR_EAST needs CONVEX_NW to the RIGHT (0, 1)
-    #   SOUTH_DOOR_WEST needs CONVEX_SE to the LEFT (0, -1)
-    #   SOUTH_DOOR_EAST needs CONVEX_SW to the RIGHT (0, 1)
-    #
-    # West/East doors are vertical, need corners ABOVE and BELOW:
-    #   WEST_DOOR_NORTH needs CONVEX_SE ABOVE (-1, 0)
-    #   WEST_DOOR_SOUTH needs CONVEX_NE BELOW (1, 0)
-    #   EAST_DOOR_NORTH needs CONVEX_SW ABOVE (-1, 0)
-    #   EAST_DOOR_SOUTH needs CONVEX_NW BELOW (1, 0)
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.NORTH_DOOR_WEST)),
-            (0, -1, _N(MetalTile.NORTH_WALL, MetalTile.CONVEX_NE)),
-        ],
-        replace=[(0, -1, MetalTile.CONVEX_NE)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.NORTH_DOOR_EAST)),
-            (0, 1, _N(MetalTile.NORTH_WALL, MetalTile.CONVEX_NW)),
-        ],
-        replace=[(0, 1, MetalTile.CONVEX_NW)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_WEST)),
-            (0, -1, _N(MetalTile.SOUTH_WALL, MetalTile.CONVEX_SE)),
-        ],
-        replace=[(0, -1, MetalTile.CONVEX_SE)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.SOUTH_DOOR_EAST)),
-            (0, 1, _N(MetalTile.SOUTH_WALL, MetalTile.CONVEX_SW)),
-        ],
-        replace=[(0, 1, MetalTile.CONVEX_SW)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_NORTH)),
-            (-1, 0, _N(MetalTile.WEST_WALL, MetalTile.CONVEX_SE)),
-        ],
-        replace=[(-1, 0, MetalTile.CONVEX_SE)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.WEST_DOOR_SOUTH)),
-            (1, 0, _N(MetalTile.WEST_WALL, MetalTile.CONVEX_NE)),
-        ],
-        replace=[(1, 0, MetalTile.CONVEX_NE)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.EAST_DOOR_NORTH)),
-            (-1, 0, _N(MetalTile.EAST_WALL, MetalTile.CONVEX_SW)),
-        ],
-        replace=[(-1, 0, MetalTile.CONVEX_SW)],
-    ),
-    TilePattern(
-        match=[
-            (0, 0, _Y(MetalTile.EAST_DOOR_SOUTH)),
-            (1, 0, _N(MetalTile.EAST_WALL, MetalTile.CONVEX_NW)),
-        ],
-        replace=[(1, 0, MetalTile.CONVEX_NW)],
-    ),
-]
-
-
-def apply_patterns(
-    tiles: np.ndarray,
-    patterns: List[TilePattern],
-    max_iterations: int = 10,
-) -> int:
-    """
-    Apply a list of patterns to the tile array until no more matches are found.
-
-    Args:
-        tiles: 2D numpy array of MetalTile values (modified in place)
-        patterns: List of TilePattern objects to apply
-        max_iterations: Maximum number of full passes to prevent infinite loops
-
-    Returns:
-        Number of replacements made
-    """
-    height, width = tiles.shape
-    total_replacements = 0
-
-    def get_tile(r: int, c: int) -> MetalTile:
-        if 0 <= r < height and 0 <= c < width:
-            return MetalTile(tiles[r, c])
-        return MetalTile.NOTHING
-
-    def set_tile(r: int, c: int, tile: MetalTile) -> None:
-        if 0 <= r < height and 0 <= c < width:
-            tiles[r, c] = tile
-
-    for _ in range(max_iterations):
-        changes_made = False
-
-        for row in range(height):
-            for col in range(width):
-                for pattern in patterns:
-                    # Check if pattern matches at this position
-                    matches = True
-                    for row_off, col_off, match_tiles in pattern.match:
-                        tile_at_pos = get_tile(row + row_off, col + col_off)
-                        if not match_tiles.matches(tile_at_pos):
-                            matches = False
-                            break
-
-                    if matches:
-                        # Apply replacements
-                        for row_off, col_off, new_tile in pattern.replace:
-                            old_tile = get_tile(row + row_off, col + col_off)
-                            if old_tile != new_tile:
-                                set_tile(row + row_off, col + col_off, new_tile)
-                                changes_made = True
-                        total_replacements += 1
-
-        if not changes_made:
-            break
-
-    return total_replacements
 
 
 def parse_metal_ascii_room(
@@ -1014,20 +550,11 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
         ],
     ),
     MetalRoomTemplate(
-        name="east-west",
-        ascii_art=[
-            "---------",
-            "w,,,,,,,e",
-            "W.......E",
-            "_________",
-        ],
-    ),
-    MetalRoomTemplate(
         name="dog-bone",
         ascii_art=[
             "1--2              1--2",
             "`,,~--------------`,,~",
-            "w..,,,,,,,,,,,,,,,,..e",
+            "w..<,,,,,,,,,,,,,,>..e",
             "W....................E",
             "!..^______________!..^",
             "3__4              3__4",

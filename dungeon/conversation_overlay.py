@@ -104,8 +104,8 @@ class ConversationOverlay:
         if self.current_page.portrait_sprite:
             portrait = self.assets.get_sprite(self.current_page.portrait_sprite)
             if portrait is not None:
-                # Use original sprite size
-                portrait_height, portrait_width = portrait.shape[:2]
+                # Use original portrait sprite size
+                _, portrait_width = portrait.shape[:2]
 
                 # Portrait position (right side top)
                 portrait_x = box_x + box_width - portrait_width - 10

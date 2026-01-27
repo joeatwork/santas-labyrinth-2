@@ -15,62 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dungeon.dungeon_gen import generate_dungeon
-from dungeon.metal_labyrinth_sprites import MetalTile
-
-
-# Mapping from MetalTile IDs to ASCII characters
-# Uses the Metal Labyrinth ASCII art conventions from metal_labyrinth_sprites.py
-# TODO: share this with the ascii parsing code, it'll tend to rot
-# otherwise as we add new tiles.
-TILE_TO_ASCII = {
-    MetalTile.NOTHING: " ",
-    # Corners
-    MetalTile.NW_CORNER: "1",
-    MetalTile.NE_CORNER: "2",
-    MetalTile.SW_CORNER: "3",
-    MetalTile.SE_CORNER: "4",
-    # Walls
-    MetalTile.NORTH_WALL: "-",
-    MetalTile.SOUTH_WALL: "_",
-    MetalTile.WEST_WALL: "[",
-    MetalTile.EAST_WALL: "]",
-    # Floor tiles
-    MetalTile.FLOOR: ".",
-    MetalTile.NORTH_WALL_BASE: ",",  # Shadow row below north walls
-    MetalTile.PILLAR_BASE: ";",
-    MetalTile.CONVEX_SW_BASE: "<",
-    MetalTile.CONVEX_SE_BASE: ">",
-    # Convex corners
-    MetalTile.CONVEX_NW: "^",
-    MetalTile.CONVEX_NE: "!",
-    MetalTile.CONVEX_SW: "~",
-    MetalTile.CONVEX_SE: "`",
-    # Pillar
-    MetalTile.PILLAR: "P",
-    # Doors
-    MetalTile.NORTH_DOOR_WEST: "n",
-    MetalTile.NORTH_DOOR_EAST: "N",
-    MetalTile.SOUTH_DOOR_WEST: "s",
-    MetalTile.SOUTH_DOOR_EAST: "S",
-    MetalTile.WEST_DOOR_NORTH: "w",
-    MetalTile.WEST_DOOR_SOUTH: "W",
-    MetalTile.EAST_DOOR_NORTH: "e",
-    MetalTile.EAST_DOOR_SOUTH: "E",
-}
-
-
-def render_dungeon_ascii(dungeon_map):
-    """Convert a dungeon map to ASCII string."""
-    lines = []
-    rows, cols = dungeon_map.shape
-    for row in range(rows):
-        line = ""
-        for col in range(cols):
-            tile = dungeon_map[row, col]
-            char = TILE_TO_ASCII.get(tile, "?")
-            line += char
-        lines.append(line)
-    return "\n".join(lines)
+from dungeon.metal_labyrinth_sprites import render_dungeon_ascii
 
 
 def main():
