@@ -27,7 +27,6 @@ from .metal_labyrinth_sprites import (
     METAL_ASCII_TO_TILE,
     METAL_ROOM_TEMPLATES,
     MetalRoomTemplate,
-    fix_tiling_to_valid,
 )
 
 if TYPE_CHECKING:
@@ -554,10 +553,6 @@ def generate_dungeon(
 
     # Crop the dungeon map to the actual used area
     dungeon_map, crop_offset = _crop_dungeon_map(dungeon_map)
-
-    # Fix tiling to satisfy adjacency rules (e.g., add base tiles, fix convex corners)
-    # This is done after cropping to avoid processing the huge initial canvas
-    fix_tiling_to_valid(dungeon_map)
 
     # Adjust all room positions by the crop offset
     room_positions_adjusted: Dict[int, Position] = {}

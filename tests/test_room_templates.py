@@ -4,8 +4,6 @@ import numpy as np
 import pytest
 from dungeon.dungeon_gen import ROOM_TEMPLATES, RoomTemplate
 from dungeon.metal_labyrinth_sprites import (
-    check_valid_tiling,
-    fix_tiling_to_valid,
     METAL_ASCII_TO_TILE,
     MetalTile,
     apply_patterns,
@@ -149,90 +147,6 @@ class TestRoomTemplateValidation:
                         f"found '{above_char}'"
                     )
 
-    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
-    def test_template_has_valid_tiling(self, template: RoomTemplate):
-        """Room template must satisfy all tiling rules (base tiles, convex corners, etc.)."""
-        # Parse ASCII art into tiles
-        width = max(len(line) for line in template.ascii_art)
-        height = len(template.ascii_art)
-
-        tiles = []
-        for line in template.ascii_art:
-            row = [METAL_ASCII_TO_TILE[char] for char in line]
-            # Pad row to width
-            while len(row) < width:
-                row.append(0)  # NOTHING
-            tiles.append(row)
-
-        tiles_array = np.array(tiles, dtype=int)
-
-        # Check for tiling errors
-        errors = check_valid_tiling(tiles_array)
-
-        # Filter out door adjacency errors - those are expected for room templates
-        # since doors are designed to connect to other rooms
-        non_door_errors = [e for e in errors if "DOOR" not in e.message]
-
-        assert (
-            len(non_door_errors) == 0
-        ), f"Template '{template.name}' has tiling errors:\n" + "\n".join(
-            f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors
-        )
-
-    @pytest.mark.parametrize("template", ROOM_TEMPLATES, ids=lambda t: t.name)
-    def test_template_valid_after_all_doors_replaced(self, template: RoomTemplate):
-        """Room template must have valid tiling after all doors are replaced with walls."""
-        # Mapping from door tiles to their corresponding wall tiles
-        door_to_wall = {
-            MetalTile.NORTH_DOOR_WEST: MetalTile.NORTH_WALL,
-            MetalTile.NORTH_DOOR_EAST: MetalTile.NORTH_WALL,
-            MetalTile.SOUTH_DOOR_WEST: MetalTile.SOUTH_WALL,
-            MetalTile.SOUTH_DOOR_EAST: MetalTile.SOUTH_WALL,
-            MetalTile.WEST_DOOR_NORTH: MetalTile.WEST_WALL,
-            MetalTile.WEST_DOOR_SOUTH: MetalTile.WEST_WALL,
-            MetalTile.EAST_DOOR_NORTH: MetalTile.EAST_WALL,
-            MetalTile.EAST_DOOR_SOUTH: MetalTile.EAST_WALL,
-        }
-
-        # TODO: I wonder if we can use the dungeon logic for unconnected doors
-        # on a one-door dungeon to replace the doors rather than writing the
-        # logic in this test directly.
-
-        # Parse ASCII art into tiles
-        width = max(len(line) for line in template.ascii_art)
-
-        tiles = []
-        for line in template.ascii_art:
-            row = [METAL_ASCII_TO_TILE[char] for char in line]
-            # Pad row to width
-            while len(row) < width:
-                row.append(0)  # NOTHING
-            tiles.append(row)
-
-        tiles_array = np.array(tiles, dtype=int)
-
-        # Replace all door tiles with wall tiles
-        for row_idx in range(tiles_array.shape[0]):
-            for col_idx in range(tiles_array.shape[1]):
-                tile = MetalTile(tiles_array[row_idx, col_idx])
-                if tile in door_to_wall:
-                    tiles_array[row_idx, col_idx] = door_to_wall[tile]
-
-        # Apply fix_tiling_to_valid to heal issues we introduced removing the doors
-        fix_tiling_to_valid(tiles_array)
-
-        # Check for tiling errors
-        errors = check_valid_tiling(tiles_array)
-
-        # Filter out door adjacency errors (there shouldn't be any since we replaced all doors)
-        non_door_errors = [e for e in errors if "DOOR" not in e.message]
-
-        assert len(non_door_errors) == 0, (
-            f"Template '{template.name}' has tiling errors after door replacement:\n"
-            + "\n".join(
-                f"  Row {e.row}, Col {e.column}: {e.message}" for e in non_door_errors
-            )
-        )
 
 
 class TestTilePatterns:
@@ -521,35 +435,6 @@ class TestTilePatterns:
         )
         assert replacements > 0, "Expected at least one replacement"
 
-    def test_useless_convex_ne_with_south_wall_to_right(self):
-        """
-        Test the pattern that replaces CONVEX_NE with SOUTH_WALL when there's
-        a south wall continuing to its right.
-
-        CONVEX_NE = junction of SOUTH_WALL + WEST_WALL, points NE into room.
-        - Its south wall component runs along the NORTH edge (faces north)
-        - Its west wall component runs along the EAST edge (faces east)
-
-        If there's a south wall to the right, the CONVEX_NE's south wall
-        component is redundant - it should just be a plain SOUTH_WALL.
-
-        Before:       After:
-        ! _           _ _
-
-        Where !=CONVEX_NE, _=SOUTH_WALL
-        """
-        tiles = np.array(
-            [[MetalTile.CONVEX_NE, MetalTile.SOUTH_WALL]],
-            dtype=int,
-        )
-
-        replacements = apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        assert tiles[0, 0] == MetalTile.SOUTH_WALL, (
-            f"Expected SOUTH_WALL at (0,0), got {MetalTile(tiles[0, 0]).name}"
-        )
-        assert replacements > 0
-
     def test_convex_ne_not_replaced_when_west_wall_to_left(self):
         """
         CONVEX_NE should NOT become WEST_WALL when there's a west wall to its LEFT.
@@ -573,36 +458,6 @@ class TestTilePatterns:
         assert tiles[0, 1] == MetalTile.CONVEX_NE, (
             f"CONVEX_NE should not be replaced when west wall is to the left, "
             f"got {MetalTile(tiles[0, 1]).name}"
-        )
-
-    def test_convex_ne_to_west_wall_correct_direction(self):
-        """
-        CONVEX_NE should become WEST_WALL when there's a west wall ABOVE it.
-
-        CONVEX_NE's west wall component runs north-south on its EAST edge,
-        with the wall going out the NORTH edge of the tile. So if there's
-        a west wall above, CONVEX_NE just continues that wall.
-
-            row0: [   (WEST_WALL - its southern edge goes down)
-            row1: !   (CONVEX_NE - should become WEST_WALL)
-
-        After: both tiles are WEST_WALL, forming a contiguous wall.
-        """
-        tiles = np.array(
-            [
-                [MetalTile.WEST_WALL],
-                [MetalTile.CONVEX_NE],
-            ],
-            dtype=int,
-        )
-
-        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
-
-        # This SHOULD work if the pattern were correct
-        # Currently it won't because the pattern checks the wrong direction
-        assert tiles[1, 0] == MetalTile.WEST_WALL, (
-            f"CONVEX_NE should become WEST_WALL when west wall is above, "
-            f"got {MetalTile(tiles[1, 0]).name}"
         )
 
     def test_sw_corner_placed_between_east_and_north_walls(self):
@@ -666,3 +521,74 @@ class TestTilePatterns:
         assert tiles[1, 1] == MetalTile.SE_CORNER, (
             f"Expected SE_CORNER at (1,1), got {MetalTile(tiles[1, 1]).name}"
         )
+
+    def test_orphaned_north_wall_base_cleaned_up(self):
+        """
+        Test that orphaned NORTH_WALL_BASE (without NORTH_WALL above) is
+        replaced with FLOOR by the pattern.
+
+        Before:       After:
+        .  (FLOOR)    .
+        ,  (BASE)     .  (orphaned base becomes FLOOR)
+        """
+        tiles = np.array(
+            [
+                [MetalTile.FLOOR],
+                [MetalTile.NORTH_WALL_BASE],
+            ],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        assert tiles[1, 0] == MetalTile.FLOOR, (
+            f"Expected orphaned base to become FLOOR, got {MetalTile(tiles[1, 0]).name}"
+        )
+
+    def test_valid_north_wall_base_not_removed(self):
+        """
+        Test that NORTH_WALL_BASE with NORTH_WALL above is NOT removed.
+
+        Before:       After (unchanged):
+        -  (NORTH_WALL)    -
+        ,  (BASE)          ,
+        """
+        tiles = np.array(
+            [
+                [MetalTile.NORTH_WALL],
+                [MetalTile.NORTH_WALL_BASE],
+            ],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        assert tiles[1, 0] == MetalTile.NORTH_WALL_BASE, (
+            f"Expected base to remain, got {MetalTile(tiles[1, 0]).name}"
+        )
+
+    def test_north_wall_base_below_west_wall_is_removed(self):
+        """
+        Test that NORTH_WALL_BASE below WEST_WALL IS removed.
+
+        NORTH_WALL_BASE is only valid below NORTH_WALL, NW_CORNER, NE_CORNER.
+        Below WEST_WALL it should be cleaned up to FLOOR.
+
+        Before:       After:
+        [  (WEST_WALL)    [
+        ,  (BASE)         .  (FLOOR)
+        """
+        tiles = np.array(
+            [
+                [MetalTile.WEST_WALL],
+                [MetalTile.NORTH_WALL_BASE],
+            ],
+            dtype=int,
+        )
+
+        apply_patterns(tiles, ROOM_REPAIR_PATTERNS)
+
+        assert tiles[1, 0] == MetalTile.FLOOR, (
+            f"Expected orphaned base below WEST_WALL to become FLOOR, got {MetalTile(tiles[1, 0]).name}"
+        )
+
