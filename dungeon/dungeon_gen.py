@@ -36,6 +36,78 @@ if TYPE_CHECKING:
 # Alias MetalTile as Tile for backward compatibility with existing code
 Tile = MetalTile
 
+def left_edge_wall(tile):
+    """
+    Corners have walls coming out of their edges,
+    so in some circumstances they can be treated as
+    straight walls to their neighbors.
+    """
+
+    if tile in [Tile.NORTH_WALL, Tile.SOUTH_WALL]:
+        return tile
+
+    if tile in [Tile.NE_CORNER, Tile.CONVEX_SE]:
+        return Tile.NORTH_WALL
+
+    if tile in [Tile.SE_CORNER, Tile.CONVEX_NE]:
+        return Tile.SOUTH_WALL
+
+    return None
+
+def right_edge_wall(tile):
+    """
+    Corners have walls coming out of their edges,
+    so in some circumstances they can be treated as
+    straight walls to their neighbors.
+    """
+
+    if tile in [Tile.NORTH_WALL, Tile.SOUTH_WALL]:
+        return tile
+
+    if tile in [Tile.NW_CORNER, Tile.CONVEX_SW]:
+        return Tile.NORTH_WALL
+
+    if tile in [Tile.SW_CORNER, Tile.CONVEX_NW]:
+        return Tile.SOUTH_WALL
+
+    return None
+
+def top_edge_wall(tile):
+    """
+    Corners have walls coming out of their edges,
+    so in some circumstances they can be treated as
+    straight walls to their neighbors.
+    """
+
+    if tile in [Tile.EAST_WALL, Tile.WEST_WALL]:
+        return tile
+
+    if tile in [Tile.SW_CORNER, Tile.CONVEX_SE]:
+        return Tile.WEST_WALL
+
+    if tile in [Tile.SE_CORNER, Tile.CONVEX_SW]:
+        return Tile.EAST_WALL
+
+    return None
+
+def bottom_edge_wall(tile):
+    """
+    Corners have walls coming out of their edges,
+    so in some circumstances they can be treated as
+    straight walls to their neighbors.
+    """
+
+    if tile in [Tile.EAST_WALL, Tile.WEST_WALL]:
+        return tile
+
+    if tile in [Tile.NW_CORNER, Tile.CONVEX_NE]:
+        return Tile.WEST_WALL
+
+    if tile in [Tile.NE_CORNER, Tile.CONVEX_NW]:
+        return Tile.EAST_WALL
+
+    return None
+
 # Use metal labyrinth ASCII mapping
 ASCII_TO_TILE = METAL_ASCII_TO_TILE
 
@@ -130,7 +202,9 @@ def _parse_ascii_room(
 
     return tiles
 
-
+# TODO: let's not assume a single door in each direction.
+# instead, let's return a list of doors for each direction,
+# or just process all doors in the caller.
 def _get_door_position(
     template: RoomTemplate, direction: Direction
 ) -> Optional[Position]:
@@ -289,6 +363,10 @@ def _replace_blind_doors_with_walls(
             if (room_id, direction) in connected_doors:
                 continue
 
+            # TODO: _has_door assumes one or zero doors per direction,
+            # which might be a bad assumption. Instead, scan the rom
+            # for door tiles and process each pair that you find.
+
             # Skip if template doesn't have this door
             if not _has_door(template, direction):
                 continue
@@ -302,89 +380,83 @@ def _replace_blind_doors_with_walls(
             door_row = room_position.row + door_pos.row
             door_col = room_position.column + door_pos.column
 
-            # Replace door tiles with walls
-            # Each door has two tiles (e.g., NORTH_DOOR_WEST and NORTH_DOOR_EAST)
-            if direction in [Direction.NORTH, Direction.SOUTH]:
-                # North/South doors are two tiles wide
-                wall_type = Tile.NORTH_WALL if direction == Direction.NORTH else Tile.SOUTH_WALL
+            # For each orientation, replace the door tiles with a straight wall.
+            # Replace the tiles that are on either side of the door with tiles
+            # that connect to the new walls. 
+
+            if direction == Direction.NORTH:
+                # Northern walls need base tiles just to the south of them
 
                 for col_offset in range(2):
-                    tile = dungeon_map[door_row, door_col + col_offset]
-                    if tile in door_to_wall:
-                        dungeon_map[door_row, door_col + col_offset] = door_to_wall[tile]
+                    dungeon_map[door_row, door_col + col_offset] = Tile.NORTH_WALL
+                    dungeon_map[door_row + 1, door_col + col_offset] = Tile.NORTH_WALL_BASE
 
-                # For north doors, replace floor tiles to the south with NORTH_WALL_BASE
-                # (north walls need a base tile below them for proper rendering)
-                if direction == Direction.NORTH:
-                    base_row = door_row + 1
-                    if base_row < dungeon_map.shape[0]:
-                        for col_offset in range(2):
-                            base_tile = dungeon_map[base_row, door_col + col_offset]
-                            # Only replace floor-like tiles, not walls or other structures
-                            if base_tile == Tile.FLOOR:
-                                dungeon_map[base_row, door_col + col_offset] = Tile.NORTH_WALL_BASE
+                # Assume that the doorframes are connected correctly to
+                # other walls, and maintain those connections when replacing them.
+                west_doorframe = dungeon_map[door_row, door_col - 1]
+                if left_edge_wall(west_doorframe) == Tile.NORTH_WALL:
+                    dungeon_map[door_row, door_col - 1] = Tile.NORTH_WALL
+                    dungeon_map[door_row + 1, door_col - 1] = Tile.NORTH_WALL_BASE
+                elif bottom_edge_wall(west_doorframe) == Tile.WEST_WALL:
+                    dungeon_map[door_row, door_col - 1] = Tile.NW_CORNER
 
-                # Replace convex corners or perpendicular walls on either side of the door
-                # West side of door (col - 1)
-                west_col = door_col - 1
-                if west_col >= 0:
-                    west_tile = dungeon_map[door_row, west_col]
-                    if west_tile in convex_to_wall:
-                        dungeon_map[door_row, west_col] = wall_type
-                    elif west_tile == Tile.WEST_WALL:
-                        # Perpendicular wall becomes a corner
-                        if direction == Direction.NORTH:
-                            dungeon_map[door_row, west_col] = Tile.NW_CORNER
-                        else:  # Direction.SOUTH
-                            dungeon_map[door_row, west_col] = Tile.SW_CORNER
+                east_doorframe = dungeon_map[door_row, door_col + 2]
+                if right_edge_wall(east_doorframe) == Tile.NORTH_WALL:
+                    dungeon_map[door_row, door_col + 2] = Tile.NORTH_WALL
+                    dungeon_map[door_row + 1, door_col + 2] = Tile.NORTH_WALL_BASE
+                elif bottom_edge_wall(east_doorframe) == Tile.EAST_WALL:
+                    dungeon_map[door_row, door_col + 2] = Tile.NE_CORNER
 
-                # East side of door (col + 2, since door is 2 tiles wide)
-                east_col = door_col + 2
-                if east_col < dungeon_map.shape[1]:
-                    east_tile = dungeon_map[door_row, east_col]
-                    if east_tile in convex_to_wall:
-                        dungeon_map[door_row, east_col] = wall_type
-                    elif east_tile == Tile.EAST_WALL:
-                        # Perpendicular wall becomes a corner
-                        if direction == Direction.NORTH:
-                            dungeon_map[door_row, east_col] = Tile.NE_CORNER
-                        else:  # Direction.SOUTH
-                            dungeon_map[door_row, east_col] = Tile.SE_CORNER
-            else:
-                # East/West doors are two tiles tall
-                wall_type = Tile.WEST_WALL if direction == Direction.WEST else Tile.EAST_WALL
 
+            elif direction == Direction.SOUTH:
+                for col_offset in range(2):
+                    dungeon_map[door_row, door_col + col_offset] = Tile.SOUTH_WALL
+
+                west_doorframe = dungeon_map[door_row, door_col - 1]
+                if left_edge_wall(west_doorframe) == Tile.SOUTH_WALL:
+                    dungeon_map[door_row, door_col - 1] = Tile.SOUTH_WALL
+                elif top_edge_wall(west_doorframe) == Tile.WEST_WALL: # ?? WRONG
+                    dungeon_map[door_row, door_col - 1] = Tile.SW_CORNER
+
+                east_doorframe = dungeon_map[door_row, door_col + 2]
+                if right_edge_wall(east_doorframe) == Tile.SOUTH_WALL:
+                    dungeon_map[door_row, door_col + 2] = Tile.SOUTH_WALL
+                elif top_edge_wall(east_doorframe) == Tile.EAST_WALL: # ??? WRONG?
+                    dungeon_map[door_row, door_col + 2] = Tile.SE_CORNER
+
+            elif direction == Direction.EAST:
                 for row_offset in range(2):
-                    tile = dungeon_map[door_row + row_offset, door_col]
-                    if tile in door_to_wall:
-                        dungeon_map[door_row + row_offset, door_col] = door_to_wall[tile]
+                    dungeon_map[door_row + row_offset, door_col] = Tile.EAST_WALL
 
-                # Replace convex corners or perpendicular walls above and below the door
-                # North side of door (row - 1)
-                north_row = door_row - 1
-                if north_row >= 0:
-                    north_tile = dungeon_map[north_row, door_col]
-                    if north_tile in convex_to_wall_vertical:
-                        dungeon_map[north_row, door_col] = wall_type
-                    elif north_tile == Tile.NORTH_WALL:
-                        # Perpendicular wall becomes a corner
-                        if direction == Direction.WEST:
-                            dungeon_map[north_row, door_col] = Tile.NW_CORNER
-                        else:  # Direction.EAST
-                            dungeon_map[north_row, door_col] = Tile.NE_CORNER
+                north_doorframe = dungeon_map[door_row - 1, door_col]
+                if top_edge_wall(north_doorframe) == Tile.EAST_WALL:
+                    dungeon_map[door_row - 1, door_col] = Tile.EAST_WALL
+                elif left_edge_wall(north_doorframe) == Tile.NORTH_WALL:
+                    dungeon_map[door_row - 1, door_col] = Tile.NE_CORNER
 
-                # South side of door (row + 2, since door is 2 tiles tall)
-                south_row = door_row + 2
-                if south_row < dungeon_map.shape[0]:
-                    south_tile = dungeon_map[south_row, door_col]
-                    if south_tile in convex_to_wall_vertical:
-                        dungeon_map[south_row, door_col] = wall_type
-                    elif south_tile == Tile.SOUTH_WALL:
-                        # Perpendicular wall becomes a corner
-                        if direction == Direction.WEST:
-                            dungeon_map[south_row, door_col] = Tile.SW_CORNER
-                        else:  # Direction.EAST
-                            dungeon_map[south_row, door_col] = Tile.SE_CORNER
+                bottom_doorframe = dungeon_map[door_row + 2, door_col]
+                if bottom_edge_wall(bottom_doorframe) == Tile.EAST_WALL:
+                    dungeon_map[door_row + 2, door_col] = Tile.EAST_WALL
+                elif left_edge_wall(bottom_doorframe) == Tile.SOUTH_WALL:
+                    dungeon_map[door_row + 2, door_col] = Tile.SE_CORNER
+
+
+            elif direction == Direction.WEST:
+                for row_offset in range(2):
+                    dungeon_map[door_row + row_offset, door_col] = Tile.WEST_WALL
+
+                north_doorframe = dungeon_map[door_row - 1, door_col]
+                if top_edge_wall(north_doorframe) == Tile.WEST_WALL:
+                    dungeon_map[door_row - 1, door_col] = Tile.WEST_WALL
+                elif right_edge_wall(north_doorframe) == Tile.NORTH_WALL:
+                    dungeon_map[door_row - 1, door_col] = Tile.NW_CORNER
+
+                bottom_doorframe = dungeon_map[door_row + 2, door_col]
+                if bottom_edge_wall(bottom_doorframe) == Tile.WEST_WALL:
+                    dungeon_map[door_row + 2, door_col] = Tile.WEST_WALL
+                elif right_edge_wall(bottom_doorframe) == Tile.SOUTH_WALL:
+                    dungeon_map[door_row + 2, door_col] = Tile.SW_CORNER
+
 
 
 def find_floor_tile_in_room(

@@ -8,6 +8,7 @@ from .sprite import Sprite
 # TODO: Dungeon generation is now much too slow, it causes the
 # stream to lag. We need to make sure it is a lot faster.
 
+
 class MetalTile(IntEnum):
     """
     Tile types for the metal labyrinth tile set.
@@ -28,16 +29,16 @@ class MetalTile(IntEnum):
     # Walls (non-walkable)
     # Walls are named for the side of the room they are on,
     # so a WEST_WALL is on the west side of a room, facing east.
-    NORTH_WALL = 10
-    SOUTH_WALL = 11
-    WEST_WALL = 12
-    EAST_WALL = 13
+    NORTH_WALL = 10 # wall along the top of a room
+    SOUTH_WALL = 11 # wall along the bottom of a room
+    WEST_WALL = 12  # the left-most wall of a room
+    EAST_WALL = 13. # the right-most wall of a room
 
     # Corners (non-walkable)
-    NW_CORNER = 20
-    NE_CORNER = 21
-    SW_CORNER = 22
-    SE_CORNER = 23
+    NW_CORNER = 20 # the joint between a west wall and a north wall
+    NE_CORNER = 21 # the joint between a north wall and an east wall
+    SW_CORNER = 22 # the joint between a west wall and a south wall
+    SE_CORNER = 23 # the joint between a south wall and an east wall
 
     # Convex corners for interior cutouts (non-walkable)
     # Convex corners are named for the direction they point,
@@ -53,6 +54,7 @@ class MetalTile(IntEnum):
 
     # Doors (walkable, used for room navigation)
     # These render as floor but are tracked for pathfinding
+    # NORTH_DOORs are on the north (topmost) wall
     NORTH_DOOR_WEST = 50
     NORTH_DOOR_EAST = 51
     SOUTH_DOOR_WEST = 52
@@ -61,7 +63,6 @@ class MetalTile(IntEnum):
     WEST_DOOR_SOUTH = 55
     EAST_DOOR_NORTH = 56
     EAST_DOOR_SOUTH = 57
-
 
 # ASCII Art Dialect for Metal Labyrinth Rooms
 # ============================================
@@ -229,8 +230,6 @@ class ParseError:
 import numpy as np
 
 
-
-
 class MatchOneTile(Protocol):
     def matches(self, tile: MetalTile) -> bool: ...
 
@@ -282,6 +281,7 @@ class TilePattern:
         A minimal ASCII art example of the sort of cases
         addressed by the pattern
         """
+
         before: List[str]
         after: List[str]
 
@@ -351,14 +351,7 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
             (0, 2, WESTERN_EDGE_NORTH_WALL),
         ],
         replace=[(0, 1, MetalTile.NORTH_WALL)],
-        illustration=TilePattern.Illustration(
-            before=[
-                "-]-"
-            ],
-            after= [
-                "---"
-            ]
-        )
+        illustration=TilePattern.Illustration(before=["-]-"], after=["---"]),
     ),
     TilePattern(
         match=[
@@ -367,14 +360,7 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
             (0, 2, WESTERN_EDGE_SOUTH_WALL),
         ],
         replace=[(0, 1, MetalTile.SOUTH_WALL)],
-        illustration=TilePattern.Illustration(
-            before=[
-                "_[_"
-            ],
-            after=[
-                "___"
-            ]
-        )
+        illustration=TilePattern.Illustration(before=["_[_"], after=["___"]),
     ),
     TilePattern(
         match=[
@@ -384,9 +370,8 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
         ],
         replace=[(1, 0, MetalTile.WEST_WALL)],
         illustration=TilePattern.Illustration(
-            before=["[", "-", "["],
-            after=["[", "[", "["]
-        )
+            before=["[", "-", "["], after=["[", "[", "["]
+        ),
     ),
     TilePattern(
         match=[
@@ -398,7 +383,7 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
         illustration=TilePattern.Illustration(
             before=["]", "-", "]"],
             after=["]", "]", "]"],
-        )
+        ),
     ),
     # Turn useless convex corners into contiguous walls
     # For example, CONVEX_SE has a north wall on it's southern edge and
@@ -408,66 +393,42 @@ ROOM_REPAIR_PATTERNS: List[TilePattern] = [
     TilePattern(
         match=[(0, 0, _Y(MetalTile.CONVEX_SE)), (0, 1, WESTERN_EDGE_NORTH_WALL)],
         replace=[(0, 0, MetalTile.NORTH_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["`-"],
-            after=["--"]
-        )
+        illustration=TilePattern.Illustration(before=["`-"], after=["--"]),
     ),
     TilePattern(
         match=[(0, 0, _Y(MetalTile.CONVEX_SE)), (1, 0, NORTHERN_EDGE_WEST_WALL)],
         replace=[(0, 0, MetalTile.WEST_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["`", "["],
-            after=["[", "["]
-        )
+        illustration=TilePattern.Illustration(before=["`", "["], after=["[", "["]),
     ),
     TilePattern(
         match=[(0, 0, EASTERN_EDGE_NORTH_WALL), (1, 0, _Y(MetalTile.CONVEX_SW))],
         replace=[(0, 1, MetalTile.NORTH_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["-~"],
-            after=["--"]
-        )
+        illustration=TilePattern.Illustration(before=["-~"], after=["--"]),
     ),
     TilePattern(
         match=[(0, 0, _Y(MetalTile.CONVEX_SW)), (0, 1, NORTHERN_EDGE_EAST_WALL)],
         replace=[(0, 0, MetalTile.EAST_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["~", "]"],
-            after=["]", "]"]
-        )
+        illustration=TilePattern.Illustration(before=["~", "]"], after=["]", "]"]),
     ),
     TilePattern(
         match=[(0, 0, _Y(MetalTile.CONVEX_NE)), (1, 0, WESTERN_EDGE_SOUTH_WALL)],
         replace=[(0, 0, MetalTile.SOUTH_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["!_"],
-            after=["__"]
-        )
+        illustration=TilePattern.Illustration(before=["!_"], after=["__"]),
     ),
     TilePattern(
         match=[(0, 0, SOUTHERN_EDGE_WEST_WALL), (0, 1, _Y(MetalTile.CONVEX_NE))],
         replace=[(0, 0, MetalTile.WEST_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["[", "!"],
-            after=["[", "["]
-        )
+        illustration=TilePattern.Illustration(before=["[", "!"], after=["[", "["]),
     ),
     TilePattern(
         match=[(0, 0, EASTERN_EDGE_SOUTH_WALL), (0, 0, _Y(MetalTile.CONVEX_NW))],
         replace=[(1, 0, MetalTile.SOUTH_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["_^"],
-            after=["__"]
-        )
+        illustration=TilePattern.Illustration(before=["_^"], after=["__"]),
     ),
     TilePattern(
         match=[(0, 0, SOUTHERN_EDGE_EAST_WALL), (0, 1, _Y(MetalTile.CONVEX_NW))],
         replace=[(0, 1, MetalTile.EAST_WALL)],
-        illustration=TilePattern.Illustration(
-            before=["[", "^"],
-            after=["[", "["]
-        )
+        illustration=TilePattern.Illustration(before=["[", "^"], after=["[", "["]),
     ),
     # Ensure bases where needed
     TilePattern(
@@ -761,8 +722,6 @@ def apply_patterns(
     return total_replacements
 
 
-
-
 def parse_metal_ascii_room(
     ascii_art: List[str],
 ) -> Tuple[List[List[MetalTile]], List[ParseError]]:
@@ -801,8 +760,6 @@ def parse_metal_ascii_room(
         tiles.append(row)
 
     return tiles, errors
-
-
 
 
 # Mapping from MetalTile values to sprite names for rendering
@@ -1015,7 +972,7 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
         name="large",
         ascii_art=[
             "1---`nN~---2",
-            "[,,,,..,,,,]",
+            "[,,,>..<,,,]",
             "[..........]",
             "`..........~",
             "w..........e",
@@ -1030,7 +987,7 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
         name="pillars",
         ascii_art=[
             "1-`nN~-2",
-            "[,,..,,]",
+            "[,>..<,]",
             "[......]",
             "`..P...~",
             "w..;...e",
@@ -1045,7 +1002,7 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
         name="donut",
         ascii_art=[
             "1----`nN~----2",
-            "[,,,,,..,,,,,]",
+            "[,,,,>..<,,,,]",
             "[............]",
             "`....^__!....~",
             "w....]  [....e",
@@ -1056,10 +1013,6 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
             "3____!sS^____4",
         ],
     ),
-    # TODO: This room isn't valid because there
-    # aren't corners around the doors, but I
-    # think it'll look just fine.
-    # We need to reconsider what door sides must look like.
     MetalRoomTemplate(
         name="east-west",
         ascii_art=[
@@ -1093,6 +1046,77 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
             "[sS]",
         ],
     ),
-    # TODO: add a diamond room
-    # and some more interesting rooms here please
 ]
+
+
+"""
+    These rooms violate some of our assumptions
+    about valid rooms.
+
+    MetalRoomTemplate(
+        name="cross",
+        ascii_art=[
+            "    1-`nN~-2    ",
+            "    [,,..,,]    ",
+            "    [......]    ",
+            "1---!......^---2",
+            "w,,,,......,,,,e",
+            "W..............E",
+            "3---^......!---4",
+            "    [......]    ",
+            "    [......]    ",
+            "    3_!sS^_4    ",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="zigzag",
+        ascii_art=[
+            "1------`nN~-2",
+            "[,,,,,,,...,]",
+            "[..........]",
+            "[..........]",
+            "[......^---4",
+            "[w....._____",
+            "[W..........e",
+            "[!..........E",
+            "1-~.........^",
+            "--,........._",
+            "[,,.........]",
+            "[...........]",
+            "[...........]",
+            "3_____!sS^__4",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="cathedral",
+        ascii_art=[
+            "1----`nN~----2",
+            "[,,,,,..,,,,,]",
+            "[.P.........P]",
+            "[.;.........;]",
+            "`..P.......P.~",
+            "w..;.......;.e",
+            "W...P.....P..E",
+            "!...;.....;..^",
+            "[............]",
+            "[............]",
+            "3____!sS^____4",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="alcoves",
+        ascii_art=[
+            "1-----`nN~-----2",
+            "[,,,,,,..,,,,,]",
+            "[P............P]",
+            "[;............;]",
+            "`..^--------!..~",
+            "w..~........`..e",
+            "W..!........^..E",
+            "!..`--------~..^",
+            "[..............]",
+            "[..............]",
+            "3_____!sS^_____4",
+        ],
+    ),
+    """
