@@ -15,6 +15,11 @@ from dungeon.world import Dungeon
 from dungeon.event_system import EventBus, Event, EventData
 
 
+# TODO: This isn't complete. Rather than delegate to
+# create_dungeon_with_priest(), we'd like to use this level
+# as a complete example of a narrative level, setting
+# up the NPCs, events and map here where readers
+# can use it to understand how to define a level.
 def create_level() -> Dungeon:
     """
     Create the simple gate level.
