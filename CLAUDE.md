@@ -21,7 +21,14 @@ with little effort.
 Prefer data classes to naked tuples for arguments and return values when not
 doing pure mathematics.
 
-We prefer small modules with clear boundaries to large python modules. Modules should use well defined, clear types to call one another.
+We prefer small modules with clear boundaries to large python modules. Modules should use well defined, clear types to call one another. When importing something from
+one module into another, consider whether or not factoring the thing imported
+into a third module might make sense.
+
+Do not use local imports.
+
+Do not use circular imports, prefer refactoring instead.
+
 
 ## Development Commands
 

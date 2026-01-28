@@ -2,16 +2,41 @@
 Dungeon setup utilities for creating pre-configured dungeons with NPCs.
 """
 
-import random
 from typing import Optional, Callable
 
 from .conversation import ConversationPage, ScriptedConversation
 from .npc import NPC, TILE_SIZE
 from .strategy import GoalSeekingStrategy
-from .dungeon_gen import create_random_dungeon
+from .dungeon_gen import create_random_dungeon, create_dungeon_with_gated_goal, Direction
 from .world import Dungeon, Hero
 
+def create_north_gate_npc(
+    tile_col: int,
+    tile_row: int,
+) -> NPC:
+    """
+    Create a north gate NPC at the given tile position.
 
+    The north gate is a 128x128 sprite (2 tiles wide, 2 tiles tall) that blocks
+    a north door. It can be removed to allow the hero to pass through.
+
+    Args:
+        tile_col: Column of the left tile of the base
+        tile_row: Row of the top tile of the base
+    """
+    # Calculate pixel position (center of 2-tile-wide, 2-tile-tall base)
+    x = tile_col * TILE_SIZE + TILE_SIZE  # Center of 2 tiles
+    y = tile_row * TILE_SIZE + TILE_SIZE  # Center of 2 tiles
+
+    return NPC(
+        x=x,
+        y=y,
+        sprite_name="north_gate",
+        npc_id="north_gate",
+    )
+
+
+# TODO: create_goal_npc should be inlined where it is used.
 def create_goal_npc(
     tile_col: int,
     tile_row: int,
@@ -228,24 +253,63 @@ def find_floor_tile_in_room(
     return None
 
 
+def get_gate_npc_position(
+    gate_direction: Direction,
+    door_position_row: int,
+    door_position_col: int,
+) -> tuple[int, int]:
+    """
+    Calculate the tile position for a gate NPC based on the door direction.
+
+    The gate blocks the door from the inside of the goal room.
+
+    Args:
+        gate_direction: Direction the door faces (always SOUTH now - the gate
+                        blocks the SOUTH door of the south-only goal room)
+        door_position_row: Row of the door's first tile
+        door_position_col: Column of the door's first tile
+
+    Returns:
+        (tile_col, tile_row) for placing the gate NPC
+    """
+    if gate_direction == Direction.SOUTH:
+        # South door: gate goes just above the door (inside goal room, blocking entry from south)
+        return (door_position_col, door_position_row - 1)
+    else:
+        raise ValueError(f"Unsupported gate direction: {gate_direction}")
+
+
 def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC, Hero]:
     """
-    Create a dungeon with a robot priest NPC and a hero.
+    Create a dungeon with a robot priest NPC, a gated goal room, and a hero.
 
-    The dungeon is generated without a goal. When the hero talks to the priest,
-    the priest places the goal in a randomly selected room and the hero's
-    search state is reset so it can find the newly placed goal.
+    The dungeon has:
+    - A goal always present in a special room with only one door
+    - A north_gate NPC blocking the door to the goal room
+    - A robot priest who removes the gate when talked to
 
     Returns:
         Tuple of (dungeon, priest_npc, hero)
     """
-    # Generate dungeon without goal - priest will place it after conversation
-    dungeon = create_random_dungeon(num_rooms, place_goal=False)
+    # Generate dungeon with a gated goal room
+    dungeon, gate_direction, door_position = create_dungeon_with_gated_goal(num_rooms)
 
-    # Find a suitable room with at least a 4x4 walkable area
-    # Try rooms in order, preferring later rooms over the starting room
+    # Place the north_gate NPC blocking the door
+    gate_col, gate_row = get_gate_npc_position(
+        gate_direction, door_position.row, door_position.column
+    )
+    gate = create_north_gate_npc(gate_col, gate_row)
+    dungeon.add_npc(gate)
+
+    # Find the goal room (to exclude it from priest placement)
+    goal_npc = dungeon.find_goal_npc()
+    goal_room_id = dungeon.get_room_id(goal_npc.x, goal_npc.y) if goal_npc else None
+
+    # Find a suitable room for the priest (with at least a 4x4 walkable area)
     priest_pos = None
     for room_id in sorted(dungeon.room_positions.keys(), reverse=True):
+        if room_id == goal_room_id:
+            continue
         priest_pos = find_floor_tile_in_room(dungeon, room_id)
         if priest_pos is not None:
             break
@@ -269,12 +333,9 @@ def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC, Hero]:
     )
     dungeon.add_hero(hero)
 
-    # Set up callback: when conversation completes, place goal and reset hero's search
+    # Set up callback: when conversation completes, remove the gate
     def on_priest_conversation_complete() -> None:
-        # Pick a random room for the goal (excluding room 0 where hero starts)
-        available_rooms = [r for r in dungeon.room_positions.keys() if r != 0]
-        goal_room = random.choice(available_rooms)
-        dungeon.place_goal(goal_room)
+        dungeon.remove_npc("north_gate")
         strategy.reset_search_state()
 
     priest.on_conversation_complete = on_priest_conversation_complete

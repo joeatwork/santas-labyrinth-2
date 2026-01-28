@@ -12,8 +12,7 @@ We grow the dungeon organically by connecting rooms through their doors.
    b. Pick a random room template that has a corresponding door (north to south, east to west)
    c. Try to place the random room so that the doors line up
    d. If it would overlap, mark this door as "blocked" and try another open door
-4. Place the goal in the last room added
-5. Replace all unconnected doors with walls (no "blind doors" that lead nowhere)
+4. Replace all unconnected doors with walls (no "blind doors" that lead nowhere)
 """
 
 import random
@@ -485,6 +484,7 @@ def _crop_dungeon_map(dungeon_map: np.ndarray) -> Tuple[np.ndarray, Position]:
     return cropped, Position(row=min_row, column=min_col)
 
 
+# TODO: generate_dungeon is obsolete, we now use create_dungeon_with_gated_goal instead
 def generate_dungeon(
     num_rooms: int,
     place_goal: bool = True,
@@ -680,6 +680,7 @@ def generate_dungeon(
     return dungeon_map, start_pos_pixel, room_positions_final, room_assignments, goal_room_id
 
 
+# TODO: create_random_dungeon is obsolete, we're using create_dungeon_with_gated_goal instead
 def create_random_dungeon(
     num_rooms: int,
     place_goal: bool = True,
@@ -707,3 +708,298 @@ def create_random_dungeon(
         dungeon.place_goal(goal_room_id)
 
     return dungeon
+
+
+def _get_template_by_name(name: str) -> RoomTemplate:
+    """Get a room template by name."""
+    return next(t for t in ROOM_TEMPLATES if t.name == name)
+
+
+def create_dungeon_with_gated_goal(
+    num_rooms: int,
+    max_retries: int = 10,
+) -> Tuple["Dungeon", Direction, Position]:
+    """
+    Create a dungeon with a goal room attached via a single door.
+
+    The goal room is attached to an unconnected north, east, or west door
+    from the main dungeon. This creates a setup where the door can be
+    blocked by a gate NPC.
+
+    Parameters:
+        num_rooms: Target number of rooms in the main dungeon (before goal room)
+        max_retries: Maximum attempts to generate a valid dungeon
+
+    Returns:
+        Tuple of (dungeon, gate_direction, gate_door_position) where:
+        - dungeon: The generated Dungeon with goal placed in the goal room
+        - gate_direction: Direction the gate faces (NORTH, EAST, or WEST)
+        - gate_door_position: Position of the door tiles (for placing gate NPC)
+
+    Raises:
+        RuntimeError: If unable to generate a valid dungeon after max_retries
+    """
+    from .world import Dungeon
+
+    for attempt in range(max_retries):
+        # Generate base dungeon layout (without sealing doors or cropping)
+        target_num_rooms = num_rooms
+        canvas_size = max(2000, target_num_rooms * 100)
+        dungeon_map: DungeonMap = np.zeros((canvas_size, canvas_size), dtype=int)
+
+        room_positions: Dict[int, Position] = {}
+        room_assignments: Dict[int, RoomTemplate] = {}
+        open_doors: List[Tuple[int, Direction, Position]] = []
+        connected_doors: Set[Tuple[int, Direction]] = set()
+
+        # Start with first room at center of canvas
+        start_room_id = 0
+        start_position = Position(row=canvas_size // 2, column=canvas_size // 2)
+        start_template = next(t for t in ROOM_TEMPLATES if t.name == "large")
+
+        room_positions[start_room_id] = start_position
+        room_assignments[start_room_id] = start_template
+
+        _place_room_on_canvas(dungeon_map, start_template, start_position)
+
+        # Add all doors from the start room to the open doors queue
+        for direction in [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]:
+            door_pos = _get_door_position(start_template, direction)
+            if door_pos:
+                open_doors.append((
+                    start_room_id,
+                    direction,
+                    Position(
+                        row=start_position.row + door_pos.row,
+                        column=start_position.column + door_pos.column,
+                    ),
+                ))
+
+        # Keep adding rooms until we reach target
+        next_room_id = 1
+
+        while len(room_assignments) < target_num_rooms and open_doors:
+            random.shuffle(open_doors)
+            source_room_id, direction, door_position = open_doors.pop()
+
+            matching_templates = [
+                room for room in ROOM_TEMPLATES
+                if _has_matching_door(room, direction)
+                and room.name not in ("south-only", "west-only", "east-only")
+            ]
+            if not matching_templates:
+                continue
+
+            random.shuffle(matching_templates)
+
+            new_template = None
+            for possible_template in matching_templates:
+                possible_room_position = _calculate_room_placement(
+                    direction, door_position, possible_template
+                )
+                if not _would_overlap(dungeon_map, possible_template, possible_room_position):
+                    new_room_position = possible_room_position
+                    new_template = possible_template
+                    break
+
+            if not new_template:
+                continue
+
+            connected_doors.add((source_room_id, direction))
+            _place_room_on_canvas(dungeon_map, new_template, new_room_position)
+            room_positions[next_room_id] = new_room_position
+            room_assignments[next_room_id] = new_template
+            connected_doors.add((next_room_id, direction.opposite()))
+
+            for new_direction in [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]:
+                if (next_room_id, new_direction) in connected_doors:
+                    continue
+                door_pos = _get_door_position(new_template, new_direction)
+                if door_pos:
+                    open_doors.append((
+                        next_room_id,
+                        new_direction,
+                        Position(
+                            row=new_room_position.row + door_pos.row,
+                            column=new_room_position.column + door_pos.column,
+                        ),
+                    ))
+
+            next_room_id += 1
+
+        # Find an unconnected door to attach the goal room chain.
+        # The goal is always in a south-only room. We need to connect it via:
+        # 1. NORTH door -> attach south-only directly (its SOUTH door connects to NORTH)
+        # 2. WEST door -> attach L-shape (WEST entrance, NORTH exit), then south-only to L-shape's NORTH
+        # 3. EAST door -> attach J-shape (EAST entrance, NORTH exit), then south-only to J-shape's NORTH
+
+        south_only_template = _get_template_by_name("south-only")
+
+        # Try NORTH doors first (direct attachment)
+        attachment_door = None
+        for room_id, direction, door_position in open_doors:
+            if direction == Direction.NORTH:
+                goal_room_position = _calculate_room_placement(
+                    direction, door_position, south_only_template
+                )
+                if not _would_overlap(dungeon_map, south_only_template, goal_room_position):
+                    attachment_door = (room_id, direction, door_position)
+                    break
+
+        connector_room_id = None
+        connector_template = None
+        connector_position = None
+
+        if attachment_door is None:
+            # Try WEST doors with L-shape connector
+            l_shape_template = _get_template_by_name("L-shape")
+            for room_id, direction, door_position in open_doors:
+                if direction == Direction.WEST:
+                    l_shape_position = _calculate_room_placement(
+                        direction, door_position, l_shape_template
+                    )
+                    if _would_overlap(dungeon_map, l_shape_template, l_shape_position):
+                        continue
+                    # Check if south-only can attach to L-shape's NORTH door
+                    l_shape_north_door = _get_door_position(l_shape_template, Direction.NORTH)
+                    if l_shape_north_door is None:
+                        continue
+                    l_shape_north_door_abs = Position(
+                        row=l_shape_position.row + l_shape_north_door.row,
+                        column=l_shape_position.column + l_shape_north_door.column,
+                    )
+                    goal_room_position = _calculate_room_placement(
+                        Direction.NORTH, l_shape_north_door_abs, south_only_template
+                    )
+                    if not _would_overlap(dungeon_map, south_only_template, goal_room_position):
+                        attachment_door = (room_id, direction, door_position)
+                        connector_room_id = next_room_id
+                        connector_template = l_shape_template
+                        connector_position = l_shape_position
+                        break
+
+        if attachment_door is None:
+            # Try EAST doors with J-shape connector
+            j_shape_template = _get_template_by_name("J-shape")
+            for room_id, direction, door_position in open_doors:
+                if direction == Direction.EAST:
+                    j_shape_position = _calculate_room_placement(
+                        direction, door_position, j_shape_template
+                    )
+                    if _would_overlap(dungeon_map, j_shape_template, j_shape_position):
+                        continue
+                    # Check if south-only can attach to J-shape's NORTH door
+                    j_shape_north_door = _get_door_position(j_shape_template, Direction.NORTH)
+                    if j_shape_north_door is None:
+                        continue
+                    j_shape_north_door_abs = Position(
+                        row=j_shape_position.row + j_shape_north_door.row,
+                        column=j_shape_position.column + j_shape_north_door.column,
+                    )
+                    goal_room_position = _calculate_room_placement(
+                        Direction.NORTH, j_shape_north_door_abs, south_only_template
+                    )
+                    if not _would_overlap(dungeon_map, south_only_template, goal_room_position):
+                        attachment_door = (room_id, direction, door_position)
+                        connector_room_id = next_room_id
+                        connector_template = j_shape_template
+                        connector_position = j_shape_position
+                        break
+
+        if attachment_door is None:
+            # No suitable door found, retry
+            continue
+
+        source_room_id, direction, door_position = attachment_door
+
+        # Place connector room if needed (L-shape or J-shape)
+        if connector_template is not None:
+            _place_room_on_canvas(dungeon_map, connector_template, connector_position)
+            room_positions[connector_room_id] = connector_position
+            room_assignments[connector_room_id] = connector_template
+            connected_doors.add((source_room_id, direction))
+            connected_doors.add((connector_room_id, direction.opposite()))
+
+            # Update for goal room attachment: attach to connector's NORTH door
+            connector_north_door = _get_door_position(connector_template, Direction.NORTH)
+            door_position = Position(
+                row=connector_position.row + connector_north_door.row,
+                column=connector_position.column + connector_north_door.column,
+            )
+            source_room_id = connector_room_id
+            direction = Direction.NORTH
+            next_room_id += 1
+
+            # Remove the original attachment door from open_doors
+            open_doors = [d for d in open_doors if d != attachment_door]
+
+        # Attach the south-only goal room
+        goal_room_position = _calculate_room_placement(direction, door_position, south_only_template)
+        _place_room_on_canvas(dungeon_map, south_only_template, goal_room_position)
+        goal_room_id = next_room_id
+        room_positions[goal_room_id] = goal_room_position
+        room_assignments[goal_room_id] = south_only_template
+
+        # Mark doors as connected
+        connected_doors.add((source_room_id, direction))
+        connected_doors.add((goal_room_id, Direction.SOUTH))  # south-only has SOUTH door
+
+        # Remove the attachment door from open_doors (if not already removed)
+        open_doors = [d for d in open_doors if d != attachment_door]
+
+        # The gate position is the SOUTH door of the south-only room
+        goal_south_door = _get_door_position(south_only_template, Direction.SOUTH)
+        gate_door_position = Position(
+            row=goal_room_position.row + goal_south_door.row,
+            column=goal_room_position.column + goal_south_door.column,
+        )
+
+        # Seal remaining blind doors
+        _replace_blind_doors_with_walls(
+            dungeon_map, room_positions, room_assignments, connected_doors
+        )
+
+        # Crop the dungeon map
+        dungeon_map, crop_offset = _crop_dungeon_map(dungeon_map)
+
+        # Adjust all positions by the crop offset
+        room_positions_adjusted: Dict[int, Tuple[int, int]] = {}
+        for room_id, pos in room_positions.items():
+            room_positions_adjusted[room_id] = (
+                pos.column - crop_offset.column,
+                pos.row - crop_offset.row,
+            )
+
+        # Adjust gate door position by crop offset
+        adjusted_gate_door_position = Position(
+            row=gate_door_position.row - crop_offset.row,
+            column=gate_door_position.column - crop_offset.column,
+        )
+
+        # Calculate start position
+        start_room_pos = room_positions[start_room_id]
+        adjusted_start_pos = Position(
+            row=start_room_pos.row - crop_offset.row,
+            column=start_room_pos.column - crop_offset.column,
+        )
+        start_pos = find_floor_tile_in_room(dungeon_map, adjusted_start_pos, start_template)
+        start_pos_pixel = (start_pos.column * 64, start_pos.row * 64)
+
+        # Create the Dungeon object
+        dungeon = Dungeon(
+            dungeon_map,
+            start_pos_pixel,
+            room_positions_adjusted,
+            room_assignments,
+        )
+
+        # Place the goal in the goal room
+        dungeon.place_goal(goal_room_id)
+
+        # Gate always faces SOUTH (blocks the SOUTH door of the south-only room)
+        return dungeon, Direction.SOUTH, adjusted_gate_door_position
+
+    raise RuntimeError(
+        f"Could not generate dungeon with gated goal after {max_retries} attempts. "
+        "No suitable unconnected NORTH, WEST, or EAST door found."
+    )

@@ -426,6 +426,34 @@ SPRITE_OFFSETS: Dict[str, Sprite] = {
         # treat the next 64x128 pixels as the location
         # of the NPC
     ),
+    # A two-tile wide NPC that exists to block a northern doorway
+    "north_gate": Sprite(
+        file="sprites/metal-labyrinth-paradigm-room.png",
+        x=256,
+        y=768,
+        width=128,
+        height=128,
+        base_width=128
+    ),
+    # A small televison set on a stand.
+    "small_tv": Sprite(
+        file="sprites/metal-labyrinth-paradigm-room.png",
+        x=0,
+        y=768,
+        width=64,
+        height=128,
+        base_height=64,
+        offset_y=64
+    ),
+    # A big flatscreen CRT
+    "big_tv": Sprite(
+        file="sprites/metal-labyrinth-paradigm-room.png",
+        x=64,
+        y=768,
+        width=128,
+        height=128
+    ),
+
     # TODO: redo this portrait art
     "robot_priest_portrait": Sprite(
         file="portraits/npc_portraits_01.png",
@@ -573,6 +601,78 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
             "[sS]",
         ],
     ),
+    MetalRoomTemplate(
+        name="south-only",
+        ascii_art=[
+            "1--2",
+            "[,,]",
+            "[..]",
+            "[..]",
+            "[..]",
+            "[..]",
+            "[..]",
+            "[sS]",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="west-only",
+        ascii_art=[
+            "1------2",
+            "[,,,,,,]",
+            "w......]",
+            "W......]",
+            "[......]",
+            "[......]",
+            "3______4",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="east-only",
+        ascii_art=[
+            "1------2",
+            "[,,,,,,]",
+            "[......e",
+            "[......E",
+            "[......]",
+            "[......]",
+            "3______4",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="J-shape",
+        ascii_art=[
+            "[nN]         ",
+            "[..]         ",
+            "[..]         ",
+            "[..]         ",
+            "[..]         ",
+            "[..]         ",
+            "[..~--------2",
+            "[..<,,,,,,,,~",
+            "[...........e",
+            "[...........E",
+            "[...........^",
+            "3___________4",
+        ],
+    ),
+    MetalRoomTemplate(
+        name="L-shape",
+        ascii_art=[
+            "         [nN]",
+            "         [..]",
+            "         [..]",
+            "         [..]",
+            "         [..]",
+            "         [..]",
+            "1--------`..]",
+            "`,,,,,,,,>..]",
+            "w...........]",
+            "W...........]",
+            "!...........]",
+            "3___________4",
+        ],
+    ),
+
 ]
 
 

@@ -5,6 +5,8 @@ from .strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractComman
 from .npc import NPC
 from typing import Tuple, List, Optional, Callable, Dict, Any, TYPE_CHECKING
 
+# TODO: This import seems incorrect. Why if TYPE_CHECKING?
+# and we shouldn't import anything from setup.
 if TYPE_CHECKING:
     from .setup import create_goal_npc
 
@@ -187,6 +189,18 @@ class Dungeon:
         """Add an NPC to the dungeon."""
         npc.room_id = self.get_room_id(npc.x, npc.y)
         self.npcs.append(npc)
+
+    def remove_npc(self, npc_id: str) -> bool:
+        """
+        Remove an NPC from the dungeon by its ID.
+
+        Returns True if an NPC was removed, False if no NPC with that ID was found.
+        """
+        for i, npc in enumerate(self.npcs):
+            if npc.npc_id == npc_id:
+                self.npcs.pop(i)
+                return True
+        return False
 
     def find_npc_at_tile(self, row: int, col: int) -> Optional[NPC]:
         """Find NPC occupying this tile (for strategy queries)."""

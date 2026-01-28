@@ -153,12 +153,21 @@ class TestCreateDungeonWithPriest:
         assert priest is not None
         assert hero is not None
 
-    def test_dungeon_starts_without_goal(self):
-        """Dungeon should not have a goal initially."""
+    def test_dungeon_starts_with_goal_behind_gate(self):
+        """Dungeon should have a goal from the start, blocked by a gate."""
         dungeon, priest, hero = create_dungeon_with_priest(5)
 
+        # Goal should be present
         goal_npc = dungeon.find_goal_npc()
-        assert goal_npc is None, "Dungeon should start without goal"
+        assert goal_npc is not None, "Dungeon should have goal from the start"
+
+        # Gate should be blocking the goal
+        gate_npc = None
+        for npc in dungeon.npcs:
+            if npc.npc_id == "north_gate":
+                gate_npc = npc
+                break
+        assert gate_npc is not None, "Gate should be blocking the goal"
 
     def test_priest_has_conversation_complete_callback(self):
         """Priest should have on_conversation_complete callback set."""
@@ -166,20 +175,24 @@ class TestCreateDungeonWithPriest:
 
         assert priest.on_conversation_complete is not None
 
-    def test_callback_places_goal(self):
-        """Calling the callback should place the goal."""
+    def test_callback_removes_gate(self):
+        """Calling the callback should remove the gate blocking the goal."""
         dungeon, priest, hero = create_dungeon_with_priest(5)
 
-        # No goal initially
-        assert dungeon.find_goal_npc() is None
+        # Gate should exist initially
+        gate_exists = any(npc.npc_id == "north_gate" for npc in dungeon.npcs)
+        assert gate_exists, "Gate should exist before callback"
 
         # Trigger the callback
         priest.on_conversation_complete()
 
-        # Now there should be a goal
+        # Gate should be removed
+        gate_exists = any(npc.npc_id == "north_gate" for npc in dungeon.npcs)
+        assert not gate_exists, "Gate should be removed after callback"
+
+        # Goal should still be present
         goal_npc = dungeon.find_goal_npc()
         assert goal_npc is not None
-        assert goal_npc.is_goal is True
 
     def test_callback_resets_hero_strategy(self):
         """Calling the callback should reset the hero's strategy state."""
@@ -201,7 +214,6 @@ class TestCreateDungeonWithPriest:
         # Run multiple times to check randomness
         for _ in range(10):
             dungeon, priest, hero = create_dungeon_with_priest(5)
-            priest.on_conversation_complete()
 
             # Find the goal position
             goal_pos = dungeon.find_goal_position()
