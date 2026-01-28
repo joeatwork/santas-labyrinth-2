@@ -45,6 +45,11 @@ def left_edge_wall(tile):
     if tile in [Tile.NORTH_WALL, Tile.SOUTH_WALL]:
         return tile
 
+    # As we add more decorative north walls,
+    # we'll need to add them here
+    if tile == Tile.NORTH_WALL_LUMP:
+        return Tile.NORTH_WALL
+
     if tile in [Tile.NE_CORNER, Tile.CONVEX_SE]:
         return Tile.NORTH_WALL
 
@@ -62,6 +67,11 @@ def right_edge_wall(tile):
 
     if tile in [Tile.NORTH_WALL, Tile.SOUTH_WALL]:
         return tile
+
+    # As we add more decorative north walls,
+    # we'll need to add them here
+    if tile == Tile.NORTH_WALL_LUMP:
+        return Tile.NORTH_WALL
 
     if tile in [Tile.NW_CORNER, Tile.CONVEX_SW]:
         return Tile.NORTH_WALL
@@ -561,7 +571,7 @@ def create_dungeon_with_gated_goal(
             matching_templates = [
                 room for room in ROOM_TEMPLATES
                 if _has_matching_door(room, direction)
-                and room.name not in ("south-only", "west-only", "east-only")
+                and room.name != "south-only"
             ]
             if not matching_templates:
                 continue

@@ -25,6 +25,7 @@ class MetalTile(IntEnum):
     PILLAR_BASE = 3  # Base below pillars (walkable)
     CONVEX_SE_BASE = 4  # Base below convex SE corner (walkable)
     CONVEX_SW_BASE = 5  # Base below convex SW corner (walkable)
+    NORTH_WALL_LUMP_BASE = 6 # Base below NORTH_WALL_LUMP (walkable)
 
     # Walls (non-walkable)
     # Walls are named for the side of the room they are on,
@@ -33,6 +34,8 @@ class MetalTile(IntEnum):
     SOUTH_WALL = 11  # wall along the bottom of a room
     WEST_WALL = 12  # the left-most wall of a room
     EAST_WALL = 13  # the right-most wall of a room
+
+    NORTH_WALL_LUMP = 14 # non-walkable, joins with north walls
 
     # Corners (non-walkable)
     NW_CORNER = 20  # the joint between a west wall and a north wall
@@ -236,6 +239,7 @@ def render_dungeon_ascii(dungeon_map) -> str:
 WALKABLE_TILES = {
     MetalTile.FLOOR,
     MetalTile.NORTH_WALL_BASE,
+    MetalTile.NORTH_WALL_LUMP_BASE,
     MetalTile.PILLAR_BASE,
     MetalTile.CONVEX_SW_BASE,
     MetalTile.CONVEX_SE_BASE,
@@ -302,6 +306,7 @@ def parse_metal_ascii_room(
 TILE_MAP: Dict[int, str] = {
     MetalTile.FLOOR: "floor",
     MetalTile.NORTH_WALL_BASE: "north_wall_base",
+    MetalTile.NORTH_WALL_LUMP_BASE: "north_wall_lump_base",
     MetalTile.PILLAR_BASE: "pillar_base",
     MetalTile.CONVEX_SW_BASE: "convex_sw_base",
     MetalTile.CONVEX_SE_BASE: "convex_se_base",
@@ -309,6 +314,7 @@ TILE_MAP: Dict[int, str] = {
     MetalTile.SOUTH_WALL: "wall_south",
     MetalTile.WEST_WALL: "wall_west",
     MetalTile.EAST_WALL: "wall_east",
+    MetalTile.NORTH_WALL_LUMP: "north_wall_lump",
     MetalTile.NW_CORNER: "wall_nw_corner",
     MetalTile.NE_CORNER: "wall_ne_corner",
     MetalTile.SW_CORNER: "wall_sw_corner",
@@ -351,12 +357,14 @@ SPRITE_OFFSETS: Dict[str, Sprite] = {
     "wall_south": Sprite(file="sprites/metal-labyrinth-paradigm-room.png", x=64, y=576),
     "wall_west": Sprite(file="sprites/metal-labyrinth-paradigm-room.png", x=0, y=64),
     "wall_east": Sprite(file="sprites/metal-labyrinth-paradigm-room.png", x=576, y=64),
-    # North walls should always have a walkable north_wall_base
-    # tile just to the south of them
-    # TODO: write a test to assert this for metal_labyrinth
-    # rooms
+    "north_wall_lump_base": Sprite(
+        file="sprites/metal-labyrinth-paradigm-room.png", x=64, y=640
+    ),
     "north_wall_base": Sprite(
         file="sprites/metal-labyrinth-paradigm-room.png", x=64, y=64
+    ),
+    "north_wall_lump_base": Sprite(
+        file="sprites/metal-labyrinth-paradigm-room.png", x=64, y=704
     ),
     "floor": Sprite(file="sprites/metal-labyrinth-paradigm-room.png", x=64, y=128),
     "pillar": Sprite(file="sprites/metal-labyrinth-paradigm-room.png", x=128, y=128),
@@ -615,30 +623,6 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
         ],
     ),
     MetalRoomTemplate(
-        name="west-only",
-        ascii_art=[
-            "1------2",
-            "[,,,,,,]",
-            "w......]",
-            "W......]",
-            "[......]",
-            "[......]",
-            "3______4",
-        ],
-    ),
-    MetalRoomTemplate(
-        name="east-only",
-        ascii_art=[
-            "1------2",
-            "[,,,,,,]",
-            "[......e",
-            "[......E",
-            "[......]",
-            "[......]",
-            "3______4",
-        ],
-    ),
-    MetalRoomTemplate(
         name="J-shape",
         ascii_art=[
             "[nN]         ",
@@ -673,6 +657,9 @@ METAL_ROOM_TEMPLATES: List[MetalRoomTemplate] = [
         ],
     ),
 
+    # TODO: need to add a template
+    # with a NORTH_WALL_LUMP and NORTH_WALL_LUMP_BASE as
+    # north wall decoration.
 ]
 
 

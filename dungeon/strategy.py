@@ -42,7 +42,9 @@ class InteractCommand:
 # Union type for all strategy commands
 StrategyCommand = Optional[Union[MoveCommand, InteractCommand]]
 
-
+# TODO: hero will walk up to north_gate NPC and freeze. We need some
+# interaction by the gate so that the gate ends up in npcs_met and
+# the hero and move on with their life.
 class Strategy(ABC):
     """
     Abstract base class for mob navigation strategies.

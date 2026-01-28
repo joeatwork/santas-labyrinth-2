@@ -7,6 +7,8 @@ from dungeon.dungeon_gen import ROOM_TEMPLATES, RoomTemplate, ASCII_TO_TILE, Til
 class TestRoomTemplateValidation:
     """Validate that all room templates have properly formed doors."""
 
+    # TODO: add a test that checks for NORTH_WALL_LUMP and NORTH_WALL_LUMP_BASE
+
     def test_all_templates_have_at_least_one_door(self):
         """Every room template must have at least one door."""
         for template in ROOM_TEMPLATES:
