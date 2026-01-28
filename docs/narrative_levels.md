@@ -439,22 +439,15 @@ def set_tile(self, row: int, col: int, tile: MetalTile) -> None:
 
 ### `dungeon/strategy.py`
 
-Add new strategies for narrative control:
+GoalSeekingStrategy is useful when we want to find NPCs,
+and we don't need a strategy to seek out single NPCs in
+particular.
+
+We will need one other strategy to get the hero to arrive
+in the dungeon and leave the dungeon by targeting a
+specific tile.
 
 ```python
-class NPCSeekingStrategy(Strategy):
-    """Navigate to talk to specific NPCs, then idle."""
-
-    def __init__(self, target_npc_ids: List[str]):
-        self.target_npc_ids = target_npc_ids
-        self.talked_to: Set[str] = set()
-
-class RoomTargetStrategy(Strategy):
-    """Navigate to a specific room."""
-
-    def __init__(self, target_room_id: int):
-        self.target_room_id = target_room_id
-
 class TileTargetStrategy(Strategy):
     """Navigate to a specific tile."""
 
@@ -522,27 +515,61 @@ else:
 
 # Implementation Plan
 
-## Phase 1: Event System Foundation
+## Phase 1: Event System Foundation ✅ COMPLETED
 
 **Goal**: Create the event infrastructure without changing existing behavior.
 
-### Milestone 1.1: Event Bus
-- Create `dungeon/event_system.py`
-- Implement `Event` enum with all event types
-- Implement `EventBus` class with `emit()` and `subscribe()` methods
-- Add unit tests for event dispatch
+### Milestone 1.1: Event Bus ✅
+- ✅ Created `dungeon/event_system.py`
+- ✅ Implemented `Event` enum with all event types
+- ✅ Implemented `EventBus` class with `emit()` and `subscribe()` methods
+- ✅ Added unit tests for event dispatch (`tests/test_event_system.py`)
 
-### Milestone 1.2: Event Hooks in Dungeon
-- Add optional `event_bus` to `Dungeon` class
-- Add `_emit()` helper method
-- Emit events for: NPC added, NPC removed, goal placed, tile changed
-- Verify existing tests still pass (no behavior change when event_bus is None)
+### Milestone 1.2: Event Hooks in Dungeon ✅
+- ✅ Added optional `event_bus` to `Dungeon` class
+- ✅ Added `_emit()` helper method
+- ✅ Emit events for: NPC added, NPC removed, goal placed, goal removed
+- ✅ Verified existing tests still pass (no behavior change when event_bus is None)
 
-### Milestone 1.3: Event Hooks in DungeonWalk
-- Track hero room transitions, emit `HERO_ENTERS_ROOM` / `HERO_EXITS_ROOM`
-- Emit `NPC_INTERACTION` when hero talks to NPC
-- Emit `CONVERSATION_END` when conversation finishes
-- Emit `LEVEL_START` in `enter()`
+### Milestone 1.3: Event Hooks in DungeonWalk ✅
+- ✅ Track hero room transitions, emit `HERO_ENTERS_ROOM` / `HERO_EXITS_ROOM`
+- ✅ Emit `NPC_INTERACTION` when hero talks to NPC
+- ✅ Emit `CONVERSATION_START` when conversation begins
+- ✅ Emit `CONVERSATION_END` when conversation finishes
+- ✅ Emit `LEVEL_START` in `enter()`
+
+### Milestone 1.4: Refactor Existing Code ✅
+- ✅ Refactored `create_dungeon_with_priest()` to use event system
+- ✅ Removed ad-hoc callback pattern (`on_conversation_complete`)
+- ✅ Event handlers registered via `_event_handler_setup` function
+- ✅ Updated all call sites and tests
+- ✅ All 225 tests passing
+
+## Phase 1.5: Minimal Level Loading ✅ COMPLETED
+
+**Goal**: Create infrastructure to load and run narrative levels.
+
+### Milestone 1.5.1: Level Registry ✅
+- ✅ Created `narrative_levels/__init__.py` with level registry
+- ✅ Implemented `register_level()` and `get_level()` functions
+- ✅ Level factories return `Dungeon` objects
+
+### Milestone 1.5.2: First Narrative Level ✅
+- ✅ Created `narrative_levels/simple_gate.py`
+- ✅ Reuses existing `create_dungeon_with_priest()` for now
+- ✅ Demonstrates the pattern: `create_level() -> Dungeon`
+
+### Milestone 1.5.3: Command Line Integration ✅
+- ✅ Added `--narrative-level` argument to `stream_animation.py`
+- ✅ Loads narrative level by name
+- ✅ Falls back to random dungeon if not specified
+
+### Next Steps:
+Now we can incrementally build out the narrative system:
+1. Add explicit room layout to `simple_gate` (replace random generation)
+2. Add declarative NPC placement
+3. Add explicit event->action mappings
+4. Build the full NarrativeLevel infrastructure
 
 ## Phase 2: Narrative Level Definition
 

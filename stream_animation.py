@@ -33,6 +33,11 @@ def main():
     parser.add_argument(
         "--num-rooms", type=int, default=18, help="Number of rooms in dungeon"
     )
+    parser.add_argument(
+        "--narrative-level",
+        type=str,
+        help="Use a narrative level by name (e.g., 'simple_gate')",
+    )
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -81,11 +86,22 @@ def main():
     dungeon_audio_file = os.path.join("assets", "dungeon_audio", "drones.mp3")
     dungeon_audio = AudioClip(dungeon_audio_file, 0.2)
 
-    # Create a dungeon generator that produces a new dungeon with priest NPC each time
-    def make_dungeon_with_priest():
-        return create_dungeon_with_priest(args.num_rooms)
+    # Create dungeon generator - either from narrative level or random
+    if args.narrative_level:
+        # Import narrative level registry
+        import narrative_levels.simple_gate  # Register levels
+        from narrative_levels import get_level
 
-    dungeon_walk = DungeonWalk(make_dungeon_with_priest, assets, random_video, dungeon_audio)
+        log(f"Loading narrative level: {args.narrative_level}")
+        dungeon_generator = get_level(args.narrative_level)
+    else:
+        # Create a dungeon generator that produces a new dungeon with priest NPC each time
+        def make_dungeon_with_priest():
+            return create_dungeon_with_priest(args.num_rooms)
+
+        dungeon_generator = make_dungeon_with_priest
+
+    dungeon_walk = DungeonWalk(dungeon_generator, assets, random_video, dungeon_audio)
 
     video_program.add_content(random_title_card, 30.0)
     video_program.add_content(dungeon_walk, 180.0)

@@ -98,13 +98,19 @@ the inbound stream to an RTMP output.
 **World Generation**:
 
 The DungeonWalk content type is a top down dungeon crawl video game, where a robot walks through a
-maze-like dungeon. The code below generates that dungeon.
+maze-like dungeon. Dungeons can be generated in two ways:
+1. **Random Generation**: Using the procedural dungeon generator in `dungeon/dungeon_gen.py`
+2. **Narrative Levels**: Using predefined level layouts from `narrative_levels/`
+
+The code below describes dungeon generation.
 
 - `dungeon/dungeon_gen.py`: Procedural dungeon generation via organic room growth with door connections. Uses 11 pre-defined ASCII room templates. Algorithm: place initial room, queue open doors, iteratively attach compatible templates, replace unconnected doors with walls, place goal in last room, crop to bounding box.
 - `dungeon/pathfinding.py`: BFS pathfinding algorithm with configurable max_distance.
 - `dungeon/animation.py`: `AssetManager` (sprite loading) + rendering functions that convert world state to pixels.
 - `dungeon/world.py`: `Dungeon` class (world state) and `Hero` class (player character). Hero handles position, movement, and animation; navigation decisions are delegated to a Strategy object.
 - `dungeon/strategy.py`: Navigation strategies for mobs. Contains `Strategy` abstract base class and `GoalSeekingStrategy` (navigates toward goal using door-based pathfinding with dead-end tracking).
+- `dungeon/event_system.py`: Event bus for dungeon events. Provides `EventBus` class for publish/subscribe pattern, `Event` enum of event types, and `EventData` container for event parameters.
+- `narrative_levels/`: Directory containing narrative level definitions. Each level is a Python module with a `create_level()` function that returns a `Dungeon`. Levels are registered with the level registry and can be loaded by name using `--narrative-level` argument.
 
 ### Key Data Flow
 
@@ -141,6 +147,48 @@ Test files:
 - `tests/test_hero_dungeon_integration.py`: Integration tests with real dungeons
 - `tests/test_pathfinding.py`: BFS pathfinding edge cases
 - `tests/test_room_templates.py`: Room template ASCII parsing validation
+- `tests/test_event_system.py`: Event bus functionality (emit, subscribe, unsubscribe, error handling)
+- `tests/test_goal_placement.py`: Event-based gate removal and hero strategy reset
+- `tests/test_narrative_levels.py`: Narrative level registry and loading
+
+### Narrative Levels
+
+Narrative levels are predefined dungeon experiences with scripted events and state changes. They are defined in `narrative_levels/` as Python modules.
+
+**Creating a Narrative Level**:
+```python
+# narrative_levels/my_level.py
+from dungeon.world import Dungeon
+from narrative_levels import register_level
+
+def create_level() -> Dungeon:
+    """Create and return a configured dungeon."""
+    # Build dungeon, place NPCs, set up event handlers
+    dungeon = ...
+    return dungeon
+
+# Register the level
+register_level("my_level", create_level)
+```
+
+**Using Narrative Levels**:
+```bash
+# Run with a specific narrative level
+uv run stream_animation.py --narrative-level simple_gate
+
+# Run with random dungeon (default)
+uv run stream_animation.py
+```
+
+**Event System**:
+Narrative levels use the event system to coordinate state changes:
+1. `EventBus` in `DungeonWalk.enter()` creates event bus and attaches to dungeon
+2. Dungeon and DungeonWalk emit events (HERO_ENTERS_ROOM, NPC_INTERACTION, CONVERSATION_END, etc.)
+3. Event handlers subscribe to events and modify dungeon state (add/remove NPCs, change tiles, etc.)
+4. Levels store event handler setup in `dungeon._event_handler_setup` function
+
+**Design Document**:
+See [docs/narrative_levels.md](docs/narrative_levels.md) for full design specification and implementation roadmap.
 
 ### Tools
 
