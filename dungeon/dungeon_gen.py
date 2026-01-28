@@ -741,7 +741,7 @@ def create_dungeon_with_gated_goal(
     """
     from .world import Dungeon
 
-    for attempt in range(max_retries):
+    for _ in range(max_retries):
         # Generate base dungeon layout (without sealing doors or cropping)
         target_num_rooms = num_rooms
         canvas_size = max(2000, target_num_rooms * 100)

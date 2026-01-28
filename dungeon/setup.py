@@ -274,7 +274,7 @@ def get_gate_npc_position(
     """
     if gate_direction == Direction.SOUTH:
         # South door: gate goes just above the door (inside goal room, blocking entry from south)
-        return (door_position_col, door_position_row - 1)
+        return (door_position_col, door_position_row)
     else:
         raise ValueError(f"Unsupported gate direction: {gate_direction}")
 
