@@ -29,6 +29,8 @@ def create_north_gate_npc(
     x = tile_col * TILE_SIZE + TILE_SIZE  # Center of 2 tiles
     y = tile_row * TILE_SIZE + TILE_SIZE  # Center of 2 tiles
 
+    # TODO: We may need some sort of no-op interaction with north_gate,
+    # or maybe even a conversation with an "ACCESS DENIED" message
     return NPC(
         x=x,
         y=y,
