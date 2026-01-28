@@ -4,7 +4,7 @@ import pytest
 import random
 import numpy as np
 from dungeon.world import Hero, Dungeon, TILE_SIZE
-from dungeon.dungeon_gen import create_random_dungeon
+from dungeon.dungeon_gen import create_dungeon_with_gated_goal
 from dungeon.strategy import InteractCommand
 
 
@@ -58,7 +58,7 @@ class TestHeroDungeonIntegration:
         """Hero should reach the goal in a small dungeon (5 rooms)."""
         random.seed(seed)
         np.random.seed(seed)
-        dungeon = create_random_dungeon(num_rooms=5)
+        dungeon, _, _ = create_dungeon_with_gated_goal(num_rooms=5)
 
         reached_goal, steps, failure_reason = run_hero_to_goal(dungeon)
 
@@ -69,7 +69,7 @@ class TestHeroDungeonIntegration:
         """Hero should reach the goal in a medium dungeon (10 rooms)."""
         random.seed(seed)
         np.random.seed(seed)
-        dungeon = create_random_dungeon(num_rooms=10)
+        dungeon, _, _ = create_dungeon_with_gated_goal(num_rooms=10)
 
         reached_goal, steps, failure_reason = run_hero_to_goal(dungeon)
 
@@ -80,7 +80,7 @@ class TestHeroDungeonIntegration:
         """Hero should reach the goal in a large dungeon (20 rooms)."""
         random.seed(seed)
         np.random.seed(seed)
-        dungeon = create_random_dungeon(num_rooms=20)
+        dungeon, _, _ = create_dungeon_with_gated_goal(num_rooms=20)
 
         reached_goal, steps, failure_reason = run_hero_to_goal(dungeon, max_steps=20000)
 

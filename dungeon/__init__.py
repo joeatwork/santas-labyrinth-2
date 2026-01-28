@@ -7,7 +7,6 @@ from dungeon.dungeon_gen import (
     Position,
     Direction,
     ASCII_TO_TILE,
-    generate_dungeon,
     find_floor_tile_in_room,
 )
 from dungeon.animation import (

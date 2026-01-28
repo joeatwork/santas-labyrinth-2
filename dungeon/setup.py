@@ -7,7 +7,7 @@ from typing import Optional, Callable
 from .conversation import ConversationPage, ScriptedConversation
 from .npc import NPC, TILE_SIZE
 from .strategy import GoalSeekingStrategy
-from .dungeon_gen import create_random_dungeon, create_dungeon_with_gated_goal, Direction
+from .dungeon_gen import create_dungeon_with_gated_goal, Direction
 from .world import Dungeon, Hero
 
 def create_north_gate_npc(
