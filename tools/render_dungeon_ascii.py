@@ -3,7 +3,7 @@
 Render a generated dungeon as ASCII art for debugging.
 
 Usage:
-    uv run tools/render_dungeon_ascii.py [--width N] [--height N] [--seed S]
+    uv run tools/render_dungeon_ascii.py [--num-rooms N] [--seed S]
 """
 
 import argparse
@@ -14,7 +14,7 @@ from pathlib import Path
 # Add parent directory to path so we can import dungeon
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dungeon.dungeon_gen import generate_dungeon
+from dungeon.dungeon_gen import create_dungeon_with_gated_goal
 from dungeon.metal_labyrinth_sprites import render_dungeon_ascii
 
 
@@ -27,18 +27,20 @@ def main():
     if args.seed is not None:
         random.seed(args.seed)
 
-    dungeon_map, start_pos, room_positions, room_assignments, goal_room_id = generate_dungeon(
+    dungeon, gate_direction, gate_door_position = create_dungeon_with_gated_goal(
         args.num_rooms
     )
 
-    ascii_art = render_dungeon_ascii(dungeon_map)
+    ascii_art = render_dungeon_ascii(dungeon.map)
     print(ascii_art)
 
     # Print some debug info
     print(f"\n--- Debug Info ---")
-    print(f"Map size: {dungeon_map.shape[1]}x{dungeon_map.shape[0]} tiles")
-    print(f"Start position (pixels): {start_pos}")
-    print(f"Rooms generated: {len(room_assignments)}")
+    print(f"Map size: {dungeon.cols}x{dungeon.rows} tiles")
+    print(f"Start position (pixels): {dungeon.start_pos}")
+    print(f"Rooms generated: {len(dungeon.room_positions)}")
+    print(f"Gate direction: {gate_direction.name}")
+    print(f"Gate door position: ({gate_door_position.column}, {gate_door_position.row})")
 
 
 if __name__ == "__main__":

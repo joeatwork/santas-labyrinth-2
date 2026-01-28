@@ -12,7 +12,6 @@ Usage:
     uv run tools/render_dungeon_image.py --rooms 10         # 10 rooms
     uv run tools/render_dungeon_image.py --seed 42          # Reproducible dungeon
     uv run tools/render_dungeon_image.py --output my.png    # Custom output path
-    uv run tools/render_dungeon_image.py --no-goal          # Without goal marker
 """
 
 import argparse
@@ -24,8 +23,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from dungeon.dungeon_gen import create_random_dungeon
-from dungeon.animation import AssetManager, create_dungeon_background, TILE_SIZE
+from dungeon.setup import create_dungeon_with_priest
+from dungeon.animation import AssetManager, create_dungeon_background, overlay_image, TILE_SIZE
 
 
 def main() -> None:
@@ -53,11 +52,6 @@ def main() -> None:
         help="Output image path (default: dungeon_render.png)",
     )
     parser.add_argument(
-        "--no-goal",
-        action="store_true",
-        help="Don't place a goal in the dungeon",
-    )
-    parser.add_argument(
         "--show-grid",
         action="store_true",
         help="Overlay a tile grid on the image",
@@ -71,9 +65,9 @@ def main() -> None:
         random.seed(args.seed)
         print(f"Using random seed: {args.seed}")
 
-    # Create dungeon
+    # Create dungeon with priest, gate, and goal (matches main system)
     print(f"Generating dungeon with {args.rooms} rooms...")
-    dungeon = create_random_dungeon(args.rooms, place_goal=not args.no_goal)
+    dungeon, _priest, hero = create_dungeon_with_priest(args.rooms)
     print(f"Dungeon size: {dungeon.cols}x{dungeon.rows} tiles ({dungeon.width_pixels}x{dungeon.height_pixels} pixels)")
 
     # Load assets and render
@@ -83,6 +77,24 @@ def main() -> None:
 
     print("Rendering dungeon background...")
     image = create_dungeon_background(dungeon.map, assets)
+
+    # Draw NPCs
+    print(f"Drawing {len(dungeon.npcs)} NPCs...")
+    for npc in dungeon.npcs:
+        sprite = assets.get_sprite(npc.sprite_name)
+        # Calculate top-left corner for sprite placement
+        # npc.x, npc.y is center of base; sprite may extend above/left due to offsets
+        sprite_x = int(npc.x - npc.sprite_width / 2 + npc.sprite_offset_x)
+        sprite_y = int(npc.y - npc.sprite_height / 2 + npc.sprite_offset_y)
+        overlay_image(image, sprite, sprite_x, sprite_y)
+        print(f"  {npc.npc_id or npc.sprite_name}: pixel ({int(npc.x)}, {int(npc.y)})")
+
+    # Draw hero
+    hero_sprite = assets.get_sprite("hero_south_0")
+    hero_x = int(hero.x - 32)
+    hero_y = int(hero.y - 32)
+    overlay_image(image, hero_sprite, hero_x, hero_y)
+    print(f"  hero: pixel ({int(hero.x)}, {int(hero.y)})")
 
     # Optionally overlay a grid
     if args.show_grid:
