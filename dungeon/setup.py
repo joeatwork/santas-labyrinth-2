@@ -9,6 +9,7 @@ from .npc import NPC, TILE_SIZE
 from .strategy import GoalSeekingStrategy
 from .dungeon_gen import create_dungeon_with_gated_goal, Direction
 from .world import Dungeon, Hero
+from .event_system import EventBus, Event, EventData
 
 def create_north_gate_npc(
     tile_col: int,
@@ -279,17 +280,17 @@ def get_gate_npc_position(
         raise ValueError(f"Unsupported gate direction: {gate_direction}")
 
 
-def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC, Hero]:
+def create_dungeon_with_priest(num_rooms: int) -> Dungeon:
     """
     Create a dungeon with a robot priest NPC, a gated goal room, and a hero.
 
     The dungeon has:
     - A goal always present in a special room with only one door
     - A north_gate NPC blocking the door to the goal room
-    - A robot priest who removes the gate when talked to
+    - A robot priest who removes the gate when talked to (via event system)
 
     Returns:
-        Tuple of (dungeon, priest_npc, hero)
+        Configured Dungeon with event handlers attached
     """
     # Generate dungeon with a gated goal room
     dungeon, gate_direction, door_position = create_dungeon_with_gated_goal(num_rooms)
@@ -333,11 +334,20 @@ def create_dungeon_with_priest(num_rooms: int) -> tuple[Dungeon, NPC, Hero]:
     )
     dungeon.add_hero(hero)
 
-    # Set up callback: when conversation completes, remove the gate
-    def on_priest_conversation_complete() -> None:
-        dungeon.remove_npc("north_gate")
-        strategy.reset_search_state()
+    # Set up event handler: when conversation with priest completes, remove the gate
+    # Note: The event bus will be set by DungeonWalk.enter() before any events fire
+    def on_priest_conversation_end(event_data: EventData) -> None:
+        npc_id = event_data.kwargs.get("npc_id")
+        if npc_id == "robot_priest":
+            dungeon.remove_npc("north_gate")
+            strategy.reset_search_state()
 
-    priest.on_conversation_complete = on_priest_conversation_complete
+    # Store the handler so it can be subscribed when event_bus is available
+    # We'll use a lambda that subscribes on first event bus access
+    def setup_event_handlers(event_bus: EventBus) -> None:
+        event_bus.subscribe(Event.CONVERSATION_END, on_priest_conversation_end)
 
-    return dungeon, priest, hero
+    # Store the setup function on the dungeon for DungeonWalk to call
+    dungeon._event_handler_setup = setup_event_handlers  # type: ignore
+
+    return dungeon

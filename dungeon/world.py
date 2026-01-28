@@ -3,6 +3,7 @@ from .dungeon_gen import Tile, DungeonMap, RoomTemplate
 from .metal_labyrinth_sprites import WALKABLE_TILES as METAL_WALKABLE_TILES
 from .strategy import Strategy, GoalSeekingStrategy, MoveCommand, InteractCommand
 from .npc import NPC
+from .event_system import EventBus, Event
 from typing import Tuple, List, Optional, Callable, Dict, Any, TYPE_CHECKING
 
 # TODO: This import seems incorrect. Why if TYPE_CHECKING?
@@ -41,8 +42,20 @@ class Dungeon:
         # Hero (set via add_hero() for custom strategies)
         self.hero: Optional["Hero"] = None
 
+        # Event system (optional)
+        self.event_bus: Optional[EventBus] = None
+
     # Tiles that can be walked on (use metal labyrinth walkable tiles)
     WALKABLE_TILES = METAL_WALKABLE_TILES
+
+    def set_event_bus(self, bus: EventBus) -> None:
+        """Set the event bus for this dungeon."""
+        self.event_bus = bus
+
+    def _emit(self, event: Event, **kwargs: Any) -> None:
+        """Emit an event if an event bus is configured."""
+        if self.event_bus:
+            self.event_bus.emit(event, **kwargs)
 
     def is_walkable(self, x: float, y: float) -> bool:
         """Check if a pixel position is walkable."""
@@ -134,11 +147,16 @@ class Dungeon:
         goal_npc = create_goal_npc(goal_pos.column, goal_pos.row)
         self.add_npc(goal_npc)
 
+        self._emit(Event.GOAL_PLACED, room_id=room_id)
+
         return (goal_pos.column, goal_pos.row)
 
     def remove_goal(self) -> None:
         """Remove the goal NPC from the dungeon if present."""
+        had_goal = any(npc.is_goal for npc in self.npcs)
         self.npcs = [npc for npc in self.npcs if not npc.is_goal]
+        if had_goal:
+            self._emit(Event.GOAL_REMOVED)
 
     def distance_to_goal(self, x: float, y: float) -> float:
         """Returns Euclidean distance in pixels from position (x, y) to the goal NPC."""
@@ -189,6 +207,7 @@ class Dungeon:
         """Add an NPC to the dungeon."""
         npc.room_id = self.get_room_id(npc.x, npc.y)
         self.npcs.append(npc)
+        self._emit(Event.NPC_ADDED, npc_id=npc.npc_id)
 
     def remove_npc(self, npc_id: str) -> bool:
         """
@@ -199,6 +218,7 @@ class Dungeon:
         for i, npc in enumerate(self.npcs):
             if npc.npc_id == npc_id:
                 self.npcs.pop(i)
+                self._emit(Event.NPC_REMOVED, npc_id=npc_id)
                 return True
         return False
 

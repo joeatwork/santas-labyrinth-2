@@ -6,6 +6,7 @@ import numpy as np
 from dungeon.world import TILE_SIZE
 from dungeon.strategy import GoalSeekingStrategy
 from dungeon.setup import create_dungeon_with_priest
+from dungeon.event_system import EventBus, Event
 
 
 class TestStrategyReset:
@@ -47,17 +48,16 @@ class TestStrategyReset:
 class TestCreateDungeonWithPriest:
     """Test the create_dungeon_with_priest factory function."""
 
-    def test_returns_dungeon_priest_and_hero(self):
-        """Should return a tuple of (dungeon, priest, hero)."""
-        dungeon, priest, hero = create_dungeon_with_priest(5)
+    def test_returns_dungeon_with_hero(self):
+        """Should return a dungeon with hero attached."""
+        dungeon = create_dungeon_with_priest(5)
 
         assert dungeon is not None
-        assert priest is not None
-        assert hero is not None
+        assert dungeon.hero is not None
 
     def test_dungeon_starts_with_goal_behind_gate(self):
         """Dungeon should have a goal from the start, blocked by a gate."""
-        dungeon, priest, hero = create_dungeon_with_priest(5)
+        dungeon = create_dungeon_with_priest(5)
 
         # Goal should be present
         goal_npc = dungeon.find_goal_npc()
@@ -71,49 +71,83 @@ class TestCreateDungeonWithPriest:
                 break
         assert gate_npc is not None, "Gate should be blocking the goal"
 
-    def test_priest_has_conversation_complete_callback(self):
-        """Priest should have on_conversation_complete callback set."""
-        dungeon, priest, hero = create_dungeon_with_priest(5)
+    def test_dungeon_has_event_handler_setup(self):
+        """Dungeon should have _event_handler_setup function for event system."""
+        dungeon = create_dungeon_with_priest(5)
 
-        assert priest.on_conversation_complete is not None
+        assert hasattr(dungeon, '_event_handler_setup')
+        assert callable(dungeon._event_handler_setup)
 
-    def test_callback_removes_gate(self):
-        """Calling the callback should remove the gate blocking the goal."""
-        dungeon, priest, hero = create_dungeon_with_priest(5)
+    def test_event_handler_removes_gate_on_priest_conversation_end(self):
+        """Event system should remove gate when priest conversation ends."""
+        dungeon = create_dungeon_with_priest(5)
+
+        # Set up event bus and handlers
+        event_bus = EventBus()
+        dungeon.set_event_bus(event_bus)
+        dungeon._event_handler_setup(event_bus)  # type: ignore
 
         # Gate should exist initially
         gate_exists = any(npc.npc_id == "north_gate" for npc in dungeon.npcs)
-        assert gate_exists, "Gate should exist before callback"
+        assert gate_exists, "Gate should exist before event"
 
-        # Trigger the callback
-        priest.on_conversation_complete()
+        # Emit conversation end event for priest
+        event_bus.emit(Event.CONVERSATION_END, npc_id="robot_priest")
 
         # Gate should be removed
         gate_exists = any(npc.npc_id == "north_gate" for npc in dungeon.npcs)
-        assert not gate_exists, "Gate should be removed after callback"
+        assert not gate_exists, "Gate should be removed after event"
 
         # Goal should still be present
         goal_npc = dungeon.find_goal_npc()
         assert goal_npc is not None
 
-    def test_callback_resets_hero_strategy(self):
-        """Calling the callback should reset the hero's strategy state."""
-        dungeon, priest, hero = create_dungeon_with_priest(5)
+    def test_event_handler_resets_hero_strategy(self):
+        """Event system should reset hero strategy when priest conversation ends."""
+        dungeon = create_dungeon_with_priest(5)
+
+        # Set up event bus and handlers
+        event_bus = EventBus()
+        dungeon.set_event_bus(event_bus)
+        dungeon._event_handler_setup(event_bus)  # type: ignore
+
+        hero = dungeon.hero
+        assert hero is not None
 
         # Simulate some strategy state
         hero.strategy.lru_doors[(5, 10)] = None
         hero.strategy.next_goal_row = 10
 
-        # Trigger the callback
-        priest.on_conversation_complete()
+        # Emit conversation end event for priest
+        event_bus.emit(Event.CONVERSATION_END, npc_id="robot_priest")
 
         # Strategy should be reset
         assert len(hero.strategy.lru_doors) == 0
         assert hero.strategy.next_goal_row is None
 
+    def test_event_handler_ignores_other_npc_conversations(self):
+        """Event system should only respond to priest NPC, not others."""
+        dungeon = create_dungeon_with_priest(5)
+
+        # Set up event bus and handlers
+        event_bus = EventBus()
+        dungeon.set_event_bus(event_bus)
+        dungeon._event_handler_setup(event_bus)  # type: ignore
+
+        # Gate should exist initially
+        gate_exists = any(npc.npc_id == "north_gate" for npc in dungeon.npcs)
+        assert gate_exists
+
+        # Emit conversation end for a different NPC
+        event_bus.emit(Event.CONVERSATION_END, npc_id="some_other_npc")
+
+        # Gate should still exist
+        gate_exists = any(npc.npc_id == "north_gate" for npc in dungeon.npcs)
+        assert gate_exists, "Gate should not be removed for other NPCs"
+
     def test_goal_placed_in_gated_room(self):
         """The goal should be placed in a separate goal room with a gate."""
-        dungeon, priest, hero = create_dungeon_with_priest(5)
+        dungeon = create_dungeon_with_priest(5)
 
         # Find the goal position
         goal_pos = dungeon.find_goal_position()

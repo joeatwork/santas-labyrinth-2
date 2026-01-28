@@ -67,7 +67,8 @@ def main() -> None:
 
     # Create dungeon with priest, gate, and goal (matches main system)
     print(f"Generating dungeon with {args.rooms} rooms...")
-    dungeon, _priest, hero = create_dungeon_with_priest(args.rooms)
+    dungeon = create_dungeon_with_priest(args.rooms)
+    hero = dungeon.hero
     print(f"Dungeon size: {dungeon.cols}x{dungeon.rows} tiles ({dungeon.width_pixels}x{dungeon.height_pixels} pixels)")
 
     # Load assets and render

@@ -22,6 +22,7 @@ from dungeon.animation import (
 from dungeon.world import Dungeon, Hero
 from dungeon.npc import NPC
 from dungeon.conversation_overlay import ConversationOverlay
+from dungeon.event_system import EventBus, Event
 
 
 # A DungeonGenerator is a callable that produces a new Dungeon each time it's called.
@@ -365,10 +366,22 @@ class DungeonWalk(Content):
         self.conversation_overlay: Optional[ConversationOverlay] = None
         self.conversation_npc: Optional["NPC"] = None  # Track which NPC is being talked to
 
+        # Event system
+        self.event_bus: Optional[EventBus] = None
+        self._last_room: Optional[int] = None  # Track room changes for events
+
     def enter(self) -> None:
         # Generate a new dungeon each time we enter
         print("Entering DungeonWalk: Generating new world...", file=sys.stderr)
         self.dungeon = self.dungeon_generator()
+
+        # Create event bus and attach to dungeon
+        self.event_bus = EventBus()
+        self.dungeon.set_event_bus(self.event_bus)
+
+        # Set up event handlers if the dungeon provides them
+        if hasattr(self.dungeon, '_event_handler_setup'):
+            self.dungeon._event_handler_setup(self.event_bus)  # type: ignore
 
         # Use hero from dungeon if set via add_hero(), otherwise create default
         if self.dungeon.hero is not None:
@@ -385,6 +398,7 @@ class DungeonWalk(Content):
         self.conversation_overlay = None
         self.hit_goal = False
         self.goal_movie_time = 0.0
+        self._last_room = None
 
         if self.ambient_audio is not None:
             self.ambient_audio.enter()
@@ -392,6 +406,10 @@ class DungeonWalk(Content):
         # Start goal_movie immediately for audio mixing
         if self.goal_movie is not None:
             self.goal_movie.enter()
+
+        # Emit level start event
+        if self.event_bus:
+            self.event_bus.emit(Event.LEVEL_START)
 
     def update(self, dt: float) -> None:
         assert self.dungeon is not None
@@ -406,6 +424,9 @@ class DungeonWalk(Content):
                 self.ambient_audio.update(dt)
             self.conversation_overlay.update(dt)
             if self.conversation_overlay.is_complete():
+                # Emit conversation end event
+                if self.event_bus and self.conversation_npc:
+                    self.event_bus.emit(Event.CONVERSATION_END, npc_id=self.conversation_npc.npc_id)
                 # Call NPC callback before clearing state
                 if self.conversation_npc and self.conversation_npc.on_conversation_complete:
                     self.conversation_npc.on_conversation_complete()
@@ -440,9 +461,22 @@ class DungeonWalk(Content):
 
         # Update hero - may return InteractCommand if strategy wants to talk
         if self.hero and self.dungeon:
+            # Track room changes for events
+            current_room = self.dungeon.get_room_id(self.hero.x, self.hero.y)
+            if current_room != self._last_room:
+                if self._last_room is not None and self.event_bus:
+                    self.event_bus.emit(Event.HERO_EXITS_ROOM, room_id=self._last_room)
+                if self.event_bus:
+                    self.event_bus.emit(Event.HERO_ENTERS_ROOM, room_id=current_room)
+                self._last_room = current_room
+
             interact_cmd = self.hero.update(dt, self.dungeon)
             if interact_cmd is not None:
                 npc = interact_cmd.npc
+
+                # Emit NPC interaction event
+                if self.event_bus:
+                    self.event_bus.emit(Event.NPC_INTERACTION, npc_id=npc.npc_id)
 
                 # Check if this is the Goal NPC
                 if npc.is_goal:
@@ -467,6 +501,8 @@ class DungeonWalk(Content):
                         self.assets
                     )
                     self.conversation_overlay.enter()
+                    if self.event_bus:
+                        self.event_bus.emit(Event.CONVERSATION_START, npc_id=npc.npc_id)
                     # Call on_interact callback if present (for regular NPCs too)
                     if npc.on_interact is not None:
                         npc.on_interact()

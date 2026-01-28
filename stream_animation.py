@@ -83,8 +83,7 @@ def main():
 
     # Create a dungeon generator that produces a new dungeon with priest NPC each time
     def make_dungeon_with_priest():
-        dungeon, _priest, _hero = create_dungeon_with_priest(args.num_rooms)
-        return dungeon
+        return create_dungeon_with_priest(args.num_rooms)
 
     dungeon_walk = DungeonWalk(make_dungeon_with_priest, assets, random_video, dungeon_audio)
 
