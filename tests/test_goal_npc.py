@@ -113,26 +113,6 @@ class TestGoalNPCInteraction:
         assert isinstance(command, InteractCommand)
         assert command.npc.is_goal is True
 
-    def test_goal_not_added_to_npcs_met(self):
-        """Interacting with Goal should not add it to npcs_met."""
-        dungeon = MockDungeon(1, 1)
-
-        # Place goal at tile (5, 5)
-        dungeon.set_goal(5, 5)
-
-        strategy = GoalSeekingStrategy(random_choice=lambda lst: lst[0])
-
-        # Place hero adjacent to goal
-        hero_row, hero_col = 6, 5
-        hero_x, hero_y = tile_center(hero_row, hero_col)
-
-        command = strategy.decide_next_move(hero_x, hero_y, dungeon)
-
-        # Should return InteractCommand
-        assert isinstance(command, InteractCommand)
-        # Goal's npc_id should NOT be in npcs_met
-        assert "goal" not in strategy.npcs_met
-
 
 class TestGoalNPCBlocksMovement:
     """Tests that Goal NPC blocks hero movement like other NPCs."""

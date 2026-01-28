@@ -528,8 +528,8 @@ class TestStrategyNPCSeeking:
 
         command = strategy.decide_next_move(hero_x, hero_y, dungeon)
 
-        # Should get MoveCommand toward goal, not InteractCommand
-        assert isinstance(command, MoveCommand)
+        # No doors and no new conversations, we're dead
+        assert command is None
 
     def test_tracks_npc_after_interaction(self):
         """Strategy adds NPC to npcs_met after returning InteractCommand."""

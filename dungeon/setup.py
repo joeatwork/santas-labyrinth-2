@@ -11,6 +11,7 @@ from .dungeon_gen import create_dungeon_with_gated_goal, Direction
 from .world import Dungeon, Hero
 from .event_system import EventBus, Event, EventData
 
+
 def create_north_gate_npc(
     tile_col: int,
     tile_row: int,
@@ -29,13 +30,27 @@ def create_north_gate_npc(
     x = tile_col * TILE_SIZE + TILE_SIZE  # Center of 2 tiles
     y = tile_row * TILE_SIZE + TILE_SIZE  # Center of 2 tiles
 
-    # TODO: We may need some sort of no-op interaction with north_gate,
-    # or maybe even a conversation with an "ACCESS DENIED" message
+    conversation = ScriptedConversation(
+        [
+            ConversationPage(
+                text=" ".join(
+                    [
+                        "ACCESS DENIED"
+                    ]
+                ),
+                speaker="Mysterious Gate",
+                duration=4.0,
+            )
+        ]
+        )
+ 
+
     return NPC(
         x=x,
         y=y,
         sprite_name="north_gate",
         npc_id="north_gate",
+        conversation_engine=conversation
     )
 
 
@@ -92,8 +107,8 @@ def create_robot_priest(
                 text=" ".join(
                     [
                         "Greetings, traveler! I bless you on your quest!",
-                        "I will cause the sacred crystal to appear somewhere in this place.",
-                        "look for it and recieve your prize!",
+                        "I will open the gateway to the sacred crystal somewhere in this place.",
+                        "Look for it and recieve your prize!",
                     ]
                 ),
                 speaker="Placeholder Robot Priest",
@@ -101,9 +116,15 @@ def create_robot_priest(
                 duration=4.0,
             ),
             ConversationPage(
+                text=" ".join(["..."]),
+                speaker="Placeholder Robot Priest",
+                portrait_sprite="robot_priest_portrait",
+                duration=2.0,
+            ),
+            ConversationPage(
                 text=" ".join(
                     [
-                        "The prize is a lil' cut scene. We're still working on it,",
+                        "The prize is a lil' video clip. We're still working on it,",
                         "it might not have as much context as we'd like right now.",
                     ]
                 ),
@@ -166,7 +187,9 @@ def has_4x4_walkable_area(dungeon: Dungeon, room_id: int) -> bool:
                 for dc in range(4):
                     map_row = base_row + start_row + dr
                     map_col = base_col + start_col + dc
-                    if not (0 <= map_row < dungeon.rows and 0 <= map_col < dungeon.cols):
+                    if not (
+                        0 <= map_row < dungeon.rows and 0 <= map_col < dungeon.cols
+                    ):
                         all_walkable = False
                         break
                     if dungeon.map[map_row, map_col] != Tile.FLOOR:

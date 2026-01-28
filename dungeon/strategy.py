@@ -42,6 +42,7 @@ class InteractCommand:
 # Union type for all strategy commands
 StrategyCommand = Optional[Union[MoveCommand, InteractCommand]]
 
+
 # TODO: hero will walk up to north_gate NPC and freeze. We need some
 # interaction by the gate so that the gate ends up in npcs_met and
 # the hero and move on with their life.
@@ -169,28 +170,37 @@ class GoalSeekingStrategy(Strategy):
                 self.lru_doors[current_door] = None
 
     def _select_target(self, x: float, y: float, dungeon: "Dungeon") -> None:
-        """Select a new target tile if we don't have one. x and y are pixel positions."""
+        """Select a new target tile if we don't have one. x and y are pixel positions.
+        Also sets an updated path and goal in self if a target is found."""
         self.next_goal_row = None
         self.next_goal_col = None
 
         current_room = dungeon.get_room_id(x, y)
 
         # Check if there are NPCs to talk to
+        # This logic means if the goal is obstructed, we'll
+        # stand at the obstruction staring at the goal forever.
         npcs_around = dungeon.get_npcs_in_room(current_room)
         new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met]
         for friend in new_npcs:
             approach = self._find_npc_approach_tile(friend, dungeon)
             if approach is not None:
-                self.next_goal_row, self.next_goal_col = approach
-                return
-
-        # Check if the Goal NPC is in the same room (always approach, even if "met")
-        goal_npc = dungeon.find_goal_npc()
-        if goal_npc is not None and goal_npc.room_id == current_room:
-            approach = self._find_npc_approach_tile(goal_npc, dungeon)
-            if approach is not None:
-                self.next_goal_row, self.next_goal_col = approach
-                return
+                hero_col = int(x / TILE_SIZE)
+                hero_row = int(y / TILE_SIZE)
+                path = find_path_bfs(
+                    hero_row,
+                    hero_col,
+                    approach[0],  # row
+                    approach[1],  # col
+                    dungeon.is_tile_walkable,
+                    max_distance=1000,
+                )
+                if path:
+                    self.next_goal_row, self.next_goal_col = approach
+                    self.current_path = path
+                    self.path_index = 0
+                    self._path_target = approach
+                    return
 
         # Otherwise, pick a door
         chosen_door: Optional[Tuple[int, int]] = None
@@ -215,7 +225,7 @@ class GoalSeekingStrategy(Strategy):
 
         if not chosen_door:
             print(
-                "no goal or doors in room {x}, {y}: {current_room}! hero is dead in the water!",
+                f"no npc or doors in room {x}, {y}: {current_room}! hero is dead in the water!",
                 file=sys.stderr,
             )
             return  # we have nothing to do!
@@ -239,7 +249,9 @@ class GoalSeekingStrategy(Strategy):
         else:
             raise RuntimeError(f"bug identifying door, {chosen_door} is {door_tile}")
 
-    def _find_npc_approach_tile(self, npc, dungeon: "Dungeon") -> Optional[Tuple[int, int]]:
+    def _find_npc_approach_tile(
+        self, npc, dungeon: "Dungeon"
+    ) -> Optional[Tuple[int, int]]:
         """
         Find a walkable tile adjacent to the NPC that the hero can stand on.
 
@@ -276,7 +288,6 @@ class GoalSeekingStrategy(Strategy):
 
         return candidates[0] if candidates else None
 
-
     def decide_next_move(
         self,
         x: float,
@@ -298,23 +309,22 @@ class GoalSeekingStrategy(Strategy):
             self.path_index = 0
             self._path_target = None
 
-        # Check if adjacent to the Goal NPC first (highest priority interaction)
-        goal_npc = dungeon.find_goal_npc()
-        if goal_npc is not None and dungeon.is_adjacent_to_npc(hero_row, hero_col, goal_npc):
-            return InteractCommand(goal_npc)
-
-        # Check if we have an available conversation with regular NPCs
+        # Check if we have an available conversation with an NPC
         room_id = dungeon.get_room_id_for_tile(hero_row, hero_col)
         npcs_around = dungeon.get_npcs_in_room(room_id)
-        new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met and not npc.is_goal]
+        new_npcs = [npc for npc in npcs_around if npc.npc_id not in self.npcs_met]
         for friend in new_npcs:
             if dungeon.is_adjacent_to_npc(hero_row, hero_col, friend):
                 self.npcs_met.add(friend.npc_id)
-                return InteractCommand(friend)             
+                return InteractCommand(friend)
 
         # Select a new target if needed
         if self.next_goal_row is None or self.next_goal_col is None:
             self._select_target(x, y, dungeon)
+
+        if self.next_goal_col is None or self.next_goal_row is None:
+            # No target selected
+            return None 
 
         # Compute path if needed
         should_recompute_path = (
@@ -324,11 +334,6 @@ class GoalSeekingStrategy(Strategy):
         )
 
         if should_recompute_path:
-            # Type narrowing: ensure goal is set
-            if self.next_goal_row is None or self.next_goal_col is None:
-                # No valid target, stay idle
-                return MoveCommand(target_x=x, target_y=y, direction=0)
-
             new_path = find_path_bfs(
                 hero_row,
                 hero_col,
@@ -337,11 +342,10 @@ class GoalSeekingStrategy(Strategy):
                 dungeon.is_tile_walkable,
                 max_distance=1000,
             )
+
             if new_path is None:
-                raise ValueError(
-                    f"Could not find path to target ({self.next_goal_row}, {self.next_goal_col}) "
-                    f"from ({hero_row}, {hero_col})"
-                )
+                # No path to target
+                return None
 
             self.current_path = new_path
             self.path_index = 0
